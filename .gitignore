@@ -1,0 +1,20 @@
+# ===== 개인 데이터 — 절대 GitHub에 올리면 안 됨 =====
+# 일정·습관·메모·사진 등 모든 실제 기록
+data/
+
+# 앱에서 다운로드/백업된 데이터 파일 (어디에 있든)
+schedule_data.json
+schedule_backup_*.json
+schedule_before_import_*.json
+
+# ===== 개발 부산물 =====
+tests/node_modules/
+node_modules/
+package-lock.json
+
+# ===== OS/에디터 파일 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.vscode/
