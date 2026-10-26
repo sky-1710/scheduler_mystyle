@@ -47,6 +47,7 @@ const dom = new JSDOM(html, {
   runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
   beforeParse(w) {
     w.HTMLElement.prototype.scrollIntoView = function () {};
+    w.localStorage.setItem('startScreenOff', '1'); // 시작 화면이 UI를 가리지 않게
     for (const [k, v] of Object.entries(seed)) w.localStorage.setItem(k, JSON.stringify(v));
   },
 });

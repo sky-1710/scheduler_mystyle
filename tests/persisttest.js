@@ -4,10 +4,11 @@ const html = fs.readFileSync('C:/Users/Owner/scheduler/index.html', 'utf8');
 
 // ---------- 1) STATIC PARITY: every dataset must appear in every save/restore spot ----------
 const js = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
-const DATASETS = ['events', 'blocks', 'blockMin', 'timeLog', 'dayTasks', 'dayGoals',
+const DATASETS = ['events', 'blocks', 'blockMin', 'blockOff', 'blockExtra', 'timeLog', 'dayTasks', 'dayGoals',
   'dayMemos', 'dayBad', 'dayRatings', 'sleepLog', 'habits', 'habitChecks', 'todoDone', 'categories', 'dayImages'];
 const LS_KEYS = {
   events: 'sched_v1', blocks: 'sched_blocks_v1', blockMin: 'sched_blockmin_v1',
+  blockOff: 'sched_blockoff_v1', blockExtra: 'sched_blockextra_v1',
   timeLog: 'sched_timelog_v1', dayTasks: 'sched_daytasks_v1', dayGoals: 'sched_daygoals_v1',
   dayMemos: 'sched_daymemos_v1', dayBad: 'sched_daybad_v1', dayRatings: 'sched_dayratings_v1',
   sleepLog: 'sched_sleep_v1',
@@ -57,7 +58,9 @@ const payload = {
   ],
   blocks: { '2026-07-06': { '10:00': 't1', '10:10': 'h1' } },
   blockMin: { '2026-07-06': { '10:00': 7 } },
-  timeLog: { '2026-07-06': { t1: 7, h1: 10 } },
+  blockOff: { '2026-07-06': { '10:00': 2 } },   // 10:02 부터 7분 = 10:02~10:09
+  blockExtra: { '2026-07-06': { '10:00': [{ id: 'h1', off: 9, len: 1 }] } }, // 같은 칸 10:09~10:10
+  timeLog: { '2026-07-06': { t1: 7, h1: 11 } },
   dayTasks: { '2026-07-06': ['m1'] },
   dayGoals: { '2026-07-06': '오늘의 목표' },
   dayMemos: { '2026-07-06': '메모 내용\n둘째 줄' },
@@ -76,7 +79,9 @@ const payload = {
 
 const dom = new JSDOM(html, {
   runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
-  beforeParse(w) { w.HTMLElement.prototype.scrollIntoView = function () {}; },
+  beforeParse(w) { w.HTMLElement.prototype.scrollIntoView = function () {};
+    w.localStorage.setItem('startScreenOff', '1'); // 시작 화면이 UI를 가리지 않게
+  },
 });
 const { window } = dom;
 
@@ -96,7 +101,7 @@ setTimeout(async () => {
       const want = JSON.stringify(payload[name]);
       if (got !== want) { console.log(`  ✗ ${name}: stored value differs`); rtFail++; }
     }
-    console.log(rtFail ? `ROUND-TRIP: ${rtFail} FAILURES` : 'ROUND-TRIP: all 11 datasets stored byte-identical ✓');
+    console.log(rtFail ? `ROUND-TRIP: ${rtFail} FAILURES` : `ROUND-TRIP: all ${Object.keys(LS_KEYS).length} datasets stored byte-identical ✓`);
 
     // 3) mutation → auto-persist: toggle a habit check, edit ledger, verify saved
     window.toggleHabit('h1', '2026-07-07');

@@ -14,6 +14,7 @@ const dom = new JSDOM(html, {
   runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
   beforeParse(w) {
     w.HTMLElement.prototype.scrollIntoView = function () {};
+    w.localStorage.setItem('startScreenOff', '1'); // 시작 화면이 UI를 가리지 않게
     w.URL.createObjectURL = () => 'blob:test'; // jsdom lacks it; real browsers have it
     w.URL.revokeObjectURL = () => {};
     w.localStorage.setItem('sched_v1', JSON.stringify([

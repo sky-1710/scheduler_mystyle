@@ -12,7 +12,8 @@ const dom = new JSDOM(html, {
   pretendToBeVisual: true,
   url: 'http://localhost/',
   beforeParse(window) {
-    window.HTMLElement.prototype.scrollIntoView = function () {}; // jsdom lacks it
+    window.HTMLElement.prototype.scrollIntoView = function () {};
+    window.localStorage.setItem('startScreenOff', '1'); // 시작 화면이 UI를 가리지 않게
     // seed app data before the script runs
     window.localStorage.setItem('sched_v1', JSON.stringify([
       { id: 'T1', title: '테스트', isTodo: true, date: ds, time: '', endTime: '',

@@ -12,6 +12,7 @@ const dom = new JSDOM(html, {
   url: 'http://localhost/',
   beforeParse(window) {
     window.HTMLElement.prototype.scrollIntoView = function () {};
+    window.localStorage.setItem('startScreenOff', '1'); // 시작 화면이 UI를 가리지 않게
     // ONLY a completed month-scoped todo → D-day list will be empty
     window.localStorage.setItem('sched_v1', JSON.stringify([
       { id: 'M1', title: '책 3권 읽기', isTodo: true, scope: 'month', date: ds,

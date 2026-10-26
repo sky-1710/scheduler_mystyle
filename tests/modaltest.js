@@ -11,6 +11,7 @@ const dom = new JSDOM(html, {
   runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
   beforeParse(w) {
     w.HTMLElement.prototype.scrollIntoView = function () {};
+    w.localStorage.setItem('startScreenOff', '1'); // 시작 화면이 UI를 가리지 않게
     w.localStorage.setItem('sched_habits_v1', JSON.stringify([
       { id: 'h1', name: '스트레칭', color: '#06B6D4', categoryId: null },
     ]));

@@ -10,6 +10,7 @@ function boot(seedFn) {
     runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
     beforeParse(w) {
       w.HTMLElement.prototype.scrollIntoView = function () {};
+    w.localStorage.setItem('startScreenOff', '1'); // 시작 화면이 UI를 가리지 않게
       seedFn(w);
     },
   });

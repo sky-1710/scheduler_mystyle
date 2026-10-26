@@ -7,10 +7,25 @@ schedule_data.json
 schedule_backup_*.json
 schedule_before_import_*.json
 
+# Google 캘린더 인증 - 절대 공유 금지
+data/.gcal_credentials.json
+data/.gcal_token.json
+data/.gcal_map.json
+.gcal_credentials.json
+.gcal_token.json
+
+# 알람 소리 (실행 시 자동 생성됨)
+assets/alarm.wav
+
 # ===== 개발 부산물 =====
 tests/node_modules/
 node_modules/
 package-lock.json
+
+# ===== 데스크톱 앱 =====
+.venv/
+__pycache__/
+*.pyc
 
 # ===== OS/에디터 파일 =====
 .DS_Store
