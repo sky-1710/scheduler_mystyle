@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Plays the pomodoro alarm through the machine's own speakers.
+"""Plays the pomodoro alarm on the output device the user picked.
 
-Windows routes notification sounds to the *default* output, so with earphones
-plugged in the chime lands in the earphones - and is missed the moment they are
-off the ears. This picks the built-in device explicitly instead.
+Windows routes notification sounds to the *default* output, so the toast itself
+stays silent and the chime is played here instead, on whichever device was chosen
+in the app (speakers while earphones are the default, or the other way round).
+No choice - or a device that is no longer plugged in - means the system default.
 """
 from __future__ import annotations
 
@@ -17,14 +18,6 @@ from PySide6.QtMultimedia import QAudioOutput, QMediaDevices, QMediaPlayer
 
 ALARM_WAV = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "alarm.wav")
-
-# names that mean "not the speakers built into this machine"
-_EXTERNAL = ("헤드셋", "헤드폰", "이어폰", "headphone", "headset", "earphone", "earbud",
-             "usb", "bluetooth", "steam", "virtual", "nvidia", "hdmi", "displayport",
-             "monitor", "tv", "dock", "airpods", "galaxy", "buds")
-# chipsets that ship on the board
-_INTERNAL = ("realtek", "conexant", "high definition audio", "intel", "smart sound",
-             "내장", "internal", "speakers", "스피커")
 
 _player = None      # kept alive; a local QMediaPlayer stops the moment it is collected
 _output = None
@@ -58,32 +51,38 @@ def make_alarm_wav(path: str = ALARM_WAV) -> str:
     return path
 
 
-def builtin_output():
-    """The board's own speakers, falling back to the system default."""
+def _device_id(d) -> str:
+    return bytes(d.id()).decode("utf-8", "replace")
+
+
+def list_outputs() -> list:
+    """Every output Windows offers right now, for the picker in the page."""
+    return [{"id": _device_id(d), "name": d.description(), "default": d.isDefault()}
+            for d in QMediaDevices.audioOutputs()]
+
+
+def find_output(device_id: str = "", name: str = ""):
+    """The chosen device, matched by id and then by name (the id can change when a
+    driver is reinstalled), falling back to the system default."""
     devices = QMediaDevices.audioOutputs()
-    default = QMediaDevices.defaultAudioOutput()
-    if not devices:
-        return default
-
-    def label(d):
-        return (d.description() or "").lower()
-
-    internal = [d for d in devices if not any(w in label(d) for w in _EXTERNAL)]
-    for d in internal:                       # a known on-board chipset wins
-        if any(w in label(d) for w in _INTERNAL):
-            return d
-    if internal:
-        return internal[0]
-    return default
+    if device_id:
+        for d in devices:
+            if _device_id(d) == device_id:
+                return d
+    if name:
+        for d in devices:
+            if d.description() == name:
+                return d
+    return QMediaDevices.defaultAudioOutput()
 
 
-def play_alarm() -> str:
-    """Rings once on the built-in speakers. Returns the device used."""
+def play_alarm(device_id: str = "", name: str = "") -> str:
+    """Rings once on the chosen device. Returns the device actually used."""
     global _player, _output
     if not os.path.exists(ALARM_WAV):
         make_alarm_wav()
 
-    device = builtin_output()
+    device = find_output(device_id, name)
     _output = QAudioOutput()
     _output.setDevice(device)
     _output.setVolume(1.0)

@@ -14,6 +14,7 @@ import json
 import traceback
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
+from PySide6.QtMultimedia import QMediaDevices
 
 from . import sound, toast
 from .gcal import GCal, NeedsLogin, NotConfigured
@@ -43,6 +44,8 @@ class _Job(QRunnable):
 class Bridge(QObject):
     # emitted (from a worker) when an async Google operation finishes
     gcalResult = Signal(str)
+    # earphones or a Bluetooth device came or went - the widget's picker re-lists
+    audioOutputsChanged = Signal()
 
     def __init__(self, storage, on_quit=None):
         super().__init__()
@@ -50,6 +53,8 @@ class Bridge(QObject):
         self._on_quit = on_quit
         self.gcal = GCal(storage.dir)
         self._gcal_busy = False
+        self._media = QMediaDevices(self)
+        self._media.audioOutputsChanged.connect(self.audioOutputsChanged)
 
     # ---------- data ----------
 
@@ -84,13 +89,26 @@ class Bridge(QObject):
     def notify(self, title: str, body: str, style: str) -> bool:
         return toast.show(title, body, style or "normal")
 
-    @Slot(str, str, result=str)
-    def alarm(self, title: str, body: str) -> str:
+    @Slot(str, str, str, str, result=str)
+    def alarm(self, title: str, body: str, device_id: str, device_name: str) -> str:
         """Pomodoro alarm: a toast that stays until dismissed, plus a chime on the
-        machine's own speakers so earphones cannot swallow it."""
+        output device picked in the page (empty = system default)."""
         toast.show(title, body, "alarm", silent=True)
+        return self.testAlarm(device_id, device_name)
+
+    @Slot(result=str)
+    def audioOutputs(self) -> str:
         try:
-            return sound.play_alarm()
+            return json.dumps(sound.list_outputs(), ensure_ascii=False)
+        except Exception as err:
+            print("listing audio outputs failed:", err)
+            return "[]"
+
+    @Slot(str, str, result=str)
+    def testAlarm(self, device_id: str, device_name: str) -> str:
+        """Just the chime, so a device can be tried before a session ends on it."""
+        try:
+            return sound.play_alarm(device_id, device_name)
         except Exception as err:
             print("alarm sound failed:", err)
             return ""

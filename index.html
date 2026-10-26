@@ -1291,6 +1291,15 @@
       min-width: 44px; text-align: center;
     }
     .w-pomo-v.off { color: var(--text2); font-weight: 500; }
+    .w-pomo-sel {
+      flex: 1; min-width: 0;
+      font-size: 11px; font-family: inherit;
+      padding: 2px 4px;
+      border: 1px solid var(--border2); border-radius: 5px;
+      background: var(--surface); color: var(--text);
+      cursor: pointer; outline: none;
+    }
+    .w-pomo-sel:focus { border-color: var(--primary); }
 
     .w-pomo-time {
       font-size: 20px; font-weight: 700;
@@ -6083,6 +6092,10 @@ async function initShell(obj) {
   document.getElementById('connectBtn').style.display = 'none'; // nothing to connect
   document.getElementById('gcalRow').style.display = '';
   if (shell.gcalResult && shell.gcalResult.connect) shell.gcalResult.connect(onGcalResult);
+  if (shell.audioOutputsChanged && shell.audioOutputsChanged.connect) {
+    shell.audioOutputsChanged.connect(refreshSoundOutputs);
+  }
+  refreshSoundOutputs();
   refreshGcal();
   const loaded = await loadFromShell();
   updateConnectBtn(true);
@@ -6477,6 +6490,60 @@ function adjustPomoBreak(delta) {
   renderWidget();
 }
 
+// The shell plays the chime on the output device picked in the widget rather
+// than wherever Windows sends sound by default. Kept by id and name - the name
+// finds the device again if a driver reinstall changes its id. Nothing stored
+// means the system default; an unplugged pick falls back to it too.
+let soundOutputs = [];      // cached so the widget can draw synchronously
+
+function pomoSoundPref() {
+  try { return JSON.parse(localStorage.getItem('pomoSound_v1') || 'null') || { id: '', name: '' }; }
+  catch { return { id: '', name: '' }; }
+}
+
+// the shell signals whenever a device comes or goes (earphones, Bluetooth)
+async function refreshSoundOutputs() {
+  if (!shell) return;
+  try { soundOutputs = JSON.parse(await shellCall('audioOutputs') || '[]'); }
+  catch { soundOutputs = []; }
+  // refill in place rather than redrawing the widget - but not while the list is open
+  const sel = pipWin && pipWin.document.getElementById('wSoundSel');
+  if (sel && pipWin.document.activeElement !== sel) fillSoundSelect(sel);
+}
+
+function fillSoundSelect(sel) {
+  const doc = sel.ownerDocument;
+  const pref = pomoSoundPref();
+  const def = soundOutputs.find(d => d.default);
+  sel.innerHTML = '';
+  const add = (id, name, text) => {
+    const o = doc.createElement('option');
+    o.value = id;
+    o.dataset.name = name;
+    o.textContent = text;
+    sel.appendChild(o);
+    return o;
+  };
+  add('', '', '기본 장치' + (def ? ` (${def.name})` : ''));
+  soundOutputs.forEach(d => add(d.id, d.name, d.name));
+  const match = soundOutputs.find(d => d.id === pref.id) ||
+                soundOutputs.find(d => pref.name && d.name === pref.name);
+  if (match) sel.value = match.id;
+  else if (pref.id) add(pref.id, pref.name, `${pref.name} (연결 안 됨)`).selected = true;
+  else sel.value = '';
+  sel.title = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+}
+
+function setPomoSound(opt) {
+  if (!opt || !opt.value) localStorage.removeItem('pomoSound_v1');
+  else localStorage.setItem('pomoSound_v1', JSON.stringify({ id: opt.value, name: opt.dataset.name }));
+}
+
+function testPomoSound() {
+  const s = pomoSoundPref();
+  return shellCall('testAlarm', s.id, s.name);
+}
+
 // one alert per phase - never a repeating alarm
 function ringPomodoro(phase, mins) {
   const title = phase === 'break' ? '휴식 끝' : '집중 완료';
@@ -6485,8 +6552,11 @@ function ringPomodoro(phase, mins) {
     : (pomoBreak > 0
         ? `${mins}분 집중을 마쳤습니다. 위젯에서 휴식을 시작하세요.`
         : `${mins}분 집중을 마쳤습니다.`);
-  // the shell rings the machine's own speakers, so earphones cannot swallow it
-  if (shell) { shell.alarm(title, body, () => {}); return; }
+  if (shell) {
+    const s = pomoSoundPref();
+    shell.alarm(title, body, s.id, s.name, () => {});
+    return;
+  }
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification('🍅 ' + title, { body, requireInteraction: true });
   } else {
@@ -6718,6 +6788,7 @@ async function toggleWidget() {
   }, 1000);
   updateWidgetBtn();
   renderWidget();
+  refreshSoundOutputs();   // in case a device change was missed while it was closed
   showToast('위젯이 열렸습니다. 다른 창 위에 항상 표시됩니다 🧩');
 }
 
@@ -6827,6 +6898,33 @@ function renderWidget() {
     pomMain.appendChild(row('휴식', pomoBreak ? `${pomoBreak}분` : '없음',
       () => adjustPomoBreak(-5), () => adjustPomoBreak(5), !pomoBreak));
 
+    // where the end-of-phase chime plays - only the shell can pick a device
+    if (shell) {
+      const r = doc.createElement('div');
+      r.className = 'w-pomo-row';
+      const k = doc.createElement('span');
+      k.className = 'w-pomo-k';
+      k.textContent = '소리';
+      const sel = doc.createElement('select');
+      sel.className = 'w-pomo-sel';
+      sel.id = 'wSoundSel';
+      fillSoundSelect(sel);
+      sel.onchange = () => {
+        setPomoSound(sel.selectedOptions[0]);
+        sel.title = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+      };
+      const test = doc.createElement('button');
+      test.className = 'w-pomo-step';
+      test.textContent = '▶';
+      test.title = '미리 듣기';
+      test.onclick = async () => {
+        test.textContent = '♪';
+        await testPomoSound();
+        setTimeout(() => { test.textContent = '▶'; }, 1200);
+      };
+      r.appendChild(k); r.appendChild(sel); r.appendChild(test);
+      pomMain.appendChild(r);
+    }
     pom.appendChild(pomMain);
 
     // the widget only switches the mode on; a to-do starts the actual session

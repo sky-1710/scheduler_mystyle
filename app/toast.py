@@ -40,8 +40,8 @@ def build_xml(title: str, body: str, style: str = "normal", silent: bool = False
     """style 'alarm' stays on screen until dismissed and offers a snooze;
     style 'normal' shows for the long duration and then falls into the Action Center."""
     title, body = escape(title or APP_NAME), escape(body or "")
-    # the alarm chime is played on the built-in speakers instead, so the toast
-    # must not also ring on whatever device happens to be default
+    # the alarm chime is played on the device picked in the app instead, so the
+    # toast must not also ring on whatever device happens to be default
     audio = '<audio silent="true"/>' if silent else ""
     if style == "alarm":
         return (
