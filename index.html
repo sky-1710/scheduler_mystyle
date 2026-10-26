@@ -1333,6 +1333,7 @@
     }
     .w-pomo-go.stop { background: none; border: 1px solid var(--border2); color: var(--text2); }
 
+    .w-pomo-sides { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
     .w-pomo-side {
       display: flex; flex-direction: column; align-items: center; gap: 4px;
       flex-shrink: 0; cursor: pointer; user-select: none;
@@ -6410,7 +6411,8 @@ let lastRecordedKey = null;
 // ===== POMODORO =====
 // Lives in the widget but ticks from the main page's clock, so a session still
 // lands (and rings) while the widget is closed. Focus and break are set apart;
-// a finished focus rolls straight into the break, and each phase rings once.
+// a finished focus waits for the break button (in 집중 모드 it rolls straight
+// into the break instead), and each phase rings once.
 // phase 'work' | 'break' counts down; 'ready' is the pause after focus, waiting
 // for the break to be taken. taskId lets the next focus resume the same task.
 let pomo = null;            // { endsAt, mins, phase, taskId }
@@ -6423,6 +6425,9 @@ let pomoWork = clampWork(parseInt(localStorage.getItem('pomoWork_v1'))
 let pomoBreak = clampBreak(
   localStorage.getItem('pomoBreak_v1') == null ? 5 : parseInt(localStorage.getItem('pomoBreak_v1')));
 let pomoMode = localStorage.getItem('pomoMode_v1') === '1';
+// 집중 모드: focus and break roll into each other on the same task, with no
+// button in between, until stopped by hand. Only meaningful with pomoMode on.
+let pomoLoop = pomoMode && localStorage.getItem('pomoLoop_v1') === '1';
 // set while the tick hands focus over to the break, so the stop it performs
 // does not also cancel the session it is in the middle of advancing
 let pomoAdvancing = false;
@@ -6463,7 +6468,16 @@ function setPomoMode(on) {
   pomoMode = !!on;
   localStorage.setItem('pomoMode_v1', pomoMode ? '1' : '0');
   if (!pomoMode && pomo) { pomo = null; savePomo(); }
+  if (!pomoMode && pomoLoop) { pomoLoop = false; localStorage.setItem('pomoLoop_v1', '0'); }
   renderWidget();
+}
+
+// switching 집중 모드 on brings pomodoro mode with it
+function setPomoLoop(on) {
+  pomoLoop = !!on;
+  localStorage.setItem('pomoLoop_v1', pomoLoop ? '1' : '0');
+  if (pomoLoop && !pomoMode) setPomoMode(true);
+  else renderWidget();
 }
 
 // kept for the keyboard/console path; the widget starts a session by picking a task
@@ -6549,9 +6563,13 @@ function ringPomodoro(phase, mins) {
   const title = phase === 'break' ? '휴식 끝' : '집중 완료';
   const body = phase === 'break'
     ? `${mins}분 쉬었습니다. 다시 집중을 시작합니다.`
-    : (pomoBreak > 0
-        ? `${mins}분 집중을 마쳤습니다. 위젯에서 휴식을 시작하세요.`
-        : `${mins}분 집중을 마쳤습니다.`);
+    : pomoLoop
+      ? (pomoBreak > 0
+          ? `${mins}분 집중을 마쳤습니다. ${pomoBreak}분 휴식을 시작합니다.`
+          : `${mins}분 집중을 마쳤습니다. 바로 다음 집중을 시작합니다.`)
+      : (pomoBreak > 0
+          ? `${mins}분 집중을 마쳤습니다. 위젯에서 휴식을 시작하세요.`
+          : `${mins}분 집중을 마쳤습니다.`);
   if (shell) {
     const s = pomoSoundPref();
     shell.alarm(title, body, s.id, s.name, () => {});
@@ -6576,12 +6594,22 @@ function pomoTick() {
   const { phase, mins } = pomo;
   const task = pomo.taskId || (recording && recording.id) || null;
   ringPomodoro(phase, mins);
-  if (phase === 'work') {
+  if (phase === 'work' && pomoLoop && !pomoBreak) {
+    // 집중 모드 with no break: the clock on the task simply runs on into the next focus
+    if (task && !recording) {
+      pomoAdvancing = true;
+      startRecording(task);
+      pomoAdvancing = false;
+    }
+    beginPhase('work', pomoWork, task);
+    render();
+  } else if (phase === 'work') {
     // stop the clock on the task first - otherwise the break would be logged as work
     pomoAdvancing = true;
     if (recording) stopRecording();
     pomoAdvancing = false;
-    if (pomoBreak > 0) offerBreak(task);     // wait for the button rather than rolling on
+    if (pomoLoop) beginPhase('break', pomoBreak, task);   // 집중 모드: the break starts itself
+    else if (pomoBreak > 0) offerBreak(task);     // wait for the button rather than rolling on
     else { pomo = null; savePomo(); }
     render();
   } else {
@@ -6813,7 +6841,7 @@ function renderWidget() {
       <div class="w-focus-task"><span class="pc-dot" style="background:${src ? src.color : COLORS[0]}"></span><span class="w-focus-name">${src ? escHtml(src.title) : ''}</span></div>
       <div class="w-focus-elapsed" id="wElapsed">${fmtElapsed(Date.now() - recording.startedAt)}</div>
       <div class="w-focus-sub">오늘 누적 ${fmtMinutes(paintedMinutes(ds, recording.id))}</div>
-      ${pomo && !pomoIsReady() ? `<div class="w-focus-pomo">${pomoIsBreak() ? '☕ 휴식' : '🍅 집중'} <span id="wPomoTime">${fmtCountdown(pomoLeftMs())}</span></div>` : ''}
+      ${pomo && !pomoIsReady() ? `<div class="w-focus-pomo">${pomoIsBreak() ? '☕ 휴식' : '🍅 집중'} <span id="wPomoTime">${fmtCountdown(pomoLeftMs())}</span>${pomoLoop ? ' · 🔁' : ''}</div>` : ''}
       <div class="w-date"><span id="wClock">${pad2(now.getHours())}:${pad2(now.getMinutes())}</span> · ${now.getMonth()+1}/${now.getDate()} (${WEEKDAYS[now.getDay()]})</div>`;
     const stop = doc.createElement('button');
     stop.className = 'w-focus-stop';
@@ -6862,7 +6890,9 @@ function renderWidget() {
       <div class="w-pomo-time" id="wPomoTime">${fmtCountdown(pomoLeftMs())}</div>
       <div class="w-pomo-lab">${pomoIsBreak()
         ? `휴식 중 · ${pomo.mins}분 → 끝나면 집중 재개`
-        : `집중 중 · ${pomo.mins}분` + (pomoBreak > 0 ? ` → 휴식 ${pomoBreak}분` : '')}</div>`;
+        : `집중 중 · ${pomo.mins}분` + (pomoBreak > 0 ? ` → 휴식 ${pomoBreak}분`
+                                                   : (pomoLoop ? ' → 바로 다음 집중' : ''))}${
+        pomoLoop ? '<br>🔁 집중 모드 · 중지할 때까지 계속' : ''}</div>`;
     pom.appendChild(pomMain);
     const stop = doc.createElement('button');
     stop.className = 'w-pomo-go stop';
@@ -6927,21 +6957,31 @@ function renderWidget() {
     }
     pom.appendChild(pomMain);
 
-    // the widget only switches the mode on; a to-do starts the actual session
-    const side = doc.createElement('div');
-    side.className = 'w-pomo-side';
-    side.title = '뽀모도로 모드';
-    side.innerHTML = `<div class="toggle${pomoMode ? ' on' : ''}"></div>
-      <div class="w-pomo-side-lab">뽀모도로</div>`;
-    side.onclick = () => setPomoMode(!pomoMode);
-    pom.appendChild(side);
+    // the widget only switches the modes on; a to-do starts the actual session
+    const sides = doc.createElement('div');
+    sides.className = 'w-pomo-sides';
+    const toggle = (label, title, on, flip) => {
+      const side = doc.createElement('div');
+      side.className = 'w-pomo-side';
+      side.title = title;
+      side.innerHTML = `<div class="toggle${on ? ' on' : ''}"></div>
+        <div class="w-pomo-side-lab">${label}</div>`;
+      side.onclick = flip;
+      sides.appendChild(side);
+    };
+    toggle('뽀모도로', '뽀모도로 모드', pomoMode, () => setPomoMode(!pomoMode));
+    toggle('집중 모드', '집중 모드 — 중지할 때까지 같은 할 일로 집중·휴식을 버튼 없이 계속 이어갑니다',
+      pomoLoop, () => setPomoLoop(!pomoLoop));
+    pom.appendChild(sides);
   }
   wrap.appendChild(pom);
 
   if (pomoMode && !pomo) {
     const ph = doc.createElement('div');
     ph.className = 'w-pomo-hint';
-    ph.textContent = '할 일을 누르면 집중이 시작됩니다';
+    ph.textContent = pomoLoop
+      ? '할 일을 누르면 시작 · 중지할 때까지 계속 이어집니다'
+      : '할 일을 누르면 집중이 시작됩니다';
     wrap.appendChild(ph);
   }
 

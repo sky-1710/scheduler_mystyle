@@ -7,10 +7,15 @@ const pad2 = n => String(n).padStart(2, '0');
 const real = new Date();
 const ds = `${real.getFullYear()}-${pad2(real.getMonth() + 1)}-${pad2(real.getDate())}`;
 
+// 위젯(Document PiP) 창 대신 쓸 빈 문서
+const widgetWin = new JSDOM('<!doctype html><html><head></head><body></body></html>',
+  { pretendToBeVisual: true }).window;
+
 const dom = new JSDOM(html, {
   runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
   beforeParse(w) {
     w.HTMLElement.prototype.scrollIntoView = function () {};
+    w.documentPictureInPicture = { requestWindow: async () => widgetWin };
     w.localStorage.setItem('startScreenOff', '1');
     w.localStorage.setItem('sched_v1', JSON.stringify([
       { id: 'P1', title: '집중할 일', date: ds, isTodo: true, color: '#448361', priority: 'normal' },
@@ -26,7 +31,7 @@ const step = (name, fn) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${err}`);
 };
 
-setTimeout(() => {
+setTimeout(async () => {
   const w = window;
   const Real = w.Date;
   const T0 = new Real(real.getFullYear(), real.getMonth(), real.getDate(), 14, 0, 0).getTime();
@@ -201,6 +206,122 @@ setTimeout(() => {
     w.stopPomo(); w.setPomoMode(false);
     return rang;
   });
+
+  // ---------- 집중 모드: 중지할 때까지 같은 할일로 버튼 없이 연속 ----------
+  const loopPref = () => w.localStorage.getItem('pomoLoop_v1');
+  const rec = () => JSON.parse(w.localStorage.getItem('recording_v1') || 'null');
+  const MIN = 60000;
+  let t = T0 + 300 * MIN;
+
+  step('집중 모드를 켜면 뽀모도로 모드도 같이 켜진다 (세션은 아직 없음)', () => {
+    w.setPomoLoop(true);
+    return loopPref() === '1' && w.localStorage.getItem('pomoMode_v1') === '1' && saved() === null;
+  });
+
+  step('집중 모드: 할일을 누르면 집중이 시작된다', () => {
+    rings.length = 0;
+    at(t);
+    w.startRecording('P1');
+    const st = saved();
+    return st && st.phase === 'work' && st.taskId === 'P1' && st.endsAt === t + 25 * MIN;
+  });
+
+  step('집중이 끝나면 버튼 없이 바로 휴식이 시작되고, 기록은 멈춘다', () => {
+    t += 25 * MIN + 500;
+    at(t);
+    w.pomoTick();
+    const st = saved();
+    return rings.length === 1 && rings[0].includes('5분 휴식을 시작합니다') &&
+           st && st.phase === 'break' && st.mins === 5 && st.endsAt === t + 5 * MIN &&
+           st.taskId === 'P1' && rec() === null;
+  });
+
+  step('휴식이 끝나면 같은 할일로 집중이 다시 시작된다', () => {
+    t += 5 * MIN + 500;
+    at(t);
+    w.pomoTick();
+    const st = saved();
+    return rings.length === 2 && rings[1].includes('휴식 끝') &&
+           st && st.phase === 'work' && st.taskId === 'P1' && rec() && rec().id === 'P1';
+  });
+
+  step('손대지 않아도 3·4바퀴째까지 계속 돈다 (대기 상태 없음)', () => {
+    const phases = [];
+    for (let i = 0; i < 2; i++) {
+      t += 25 * MIN + 500; at(t); w.pomoTick(); phases.push(saved().phase);
+      t += 5 * MIN + 500;  at(t); w.pomoTick(); phases.push(saved().phase);
+    }
+    return phases.join(',') === 'break,work,break,work' && rings.length === 6 &&
+           rec() && rec().id === 'P1';
+  });
+
+  step('집중 모드에서도 할일을 다시 눌러 멈추면 끝난다', () => {
+    w.stopRecording();
+    t += 60 * MIN; at(t); w.pomoTick();
+    return saved() === null && rings.length === 6;
+  });
+
+  step('휴식 중 「중지」로도 끝난다', () => {
+    at(t);
+    w.startRecording('P1');
+    t += 25 * MIN + 500; at(t); w.pomoTick();     // -> break
+    const inBreak = saved() && saved().phase === 'break';
+    w.stopPomo();
+    t += 60 * MIN; at(t); w.pomoTick();
+    return inBreak && saved() === null && rec() === null && rings.length === 7;
+  });
+
+  step('집중 모드 + 휴식 0분: 기록을 끊지 않고 집중만 연달아 이어진다', () => {
+    w.adjustPomoBreak(-5);                         // 휴식 없음
+    rings.length = 0;
+    at(t);
+    w.startRecording('P1');
+    const started = rec().startedAt;
+    const phases = [];
+    for (let i = 0; i < 2; i++) {
+      t += 25 * MIN + 500; at(t); w.pomoTick();
+      phases.push(saved().phase);
+    }
+    const ok = phases.join(',') === 'work,work' && rings.length === 2 &&
+               rings[0].includes('바로 다음 집중') &&
+               saved().endsAt === t + 25 * MIN && rec() && rec().startedAt === started;
+    w.stopRecording();
+    w.adjustPomoBreak(5);
+    return ok;
+  });
+
+  step('뽀모도로 모드를 끄면 집중 모드도 꺼지고, 다시 켜면 버튼 대기 방식으로 돌아온다', () => {
+    w.setPomoMode(false);
+    const off = loopPref() === '0';
+    w.setPomoMode(true);
+    rings.length = 0;
+    at(t);
+    w.startRecording('P1');
+    t += 25 * MIN + 500; at(t); w.pomoTick();
+    const ready = saved() && saved().phase === 'ready' && rings[0].includes('위젯에서 휴식을 시작');
+    w.stopPomo(); w.setPomoMode(false);
+    return off && loopPref() === '0' && ready;
+  });
+
+  // 위젯: 스위치 두 개가 보이고, 집중 모드 스위치가 동작하는지 (PiP 창은 빈 문서로 대체)
+  const widgetOk = await (async () => {
+    await w.toggleWidget();
+    const wd = widgetWin.document;
+    const labels = () => [...wd.querySelectorAll('.w-pomo-side-lab')].map(e => e.textContent.trim());
+    const before = labels().join('|') === '뽀모도로|집중 모드';
+    wd.querySelectorAll('.w-pomo-side')[1].click();
+    const ons = [...wd.querySelectorAll('.w-pomo-side .toggle')].map(e => e.classList.contains('on'));
+    const hint = (wd.querySelector('.w-pomo-hint') || {}).textContent || '';
+    at(t);
+    w.startRecording('P1');                         // 위젯은 집중 화면으로 바뀐다
+    const focusLine = (wd.querySelector('.w-focus-pomo') || {}).textContent || '';
+    t += 25 * MIN + 500; at(t); w.pomoTick();     // 휴식: 본 위젯에 진행 표시
+    const lab = (wd.querySelector('.w-pomo-lab') || {}).textContent || '';
+    w.stopPomo(); w.setPomoMode(false);
+    return before && ons.join(',') === 'true,true' && /중지할 때까지 계속/.test(hint) &&
+           /🔁/.test(focusLine) && /휴식 중/.test(lab) && /집중 모드/.test(lab);
+  })();
+  step('위젯에 「뽀모도로」「집중 모드」 스위치가 있고, 집중 모드를 누르면 둘 다 켜진다', () => widgetOk);
 
   step('카운트다운 표기', () =>
     w.fmtCountdown(90000) === '01:30' && w.fmtCountdown(0) === '00:00' &&
