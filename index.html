@@ -1188,247 +1188,441 @@
     }
     .hm-cell { width: 11px; height: 11px; border-radius: 3px; background: var(--surface2); }
 
-    /* Floating widget (Document Picture-in-Picture) */
+    /* Floating widget. In the desktop shell the window is frameless and
+       see-through, so the card floats on the desktop with its own rounded edge
+       and shadow (desk-pet style); in a browser's Picture-in-Picture window the
+       card simply fills the window. */
     .widget-body {
       display: block;
-      overflow-y: auto;
+      height: 100vh;
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
     }
-    .widget { padding: 12px 14px 20px; }
-    .w-head { text-align: center; margin-bottom: 10px; }
-    .w-clock { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-    .w-date { font-size: 11px; color: var(--text2); margin-top: 2px; }
-    .w-rec {
+    .widget-body.float { background: transparent; padding: 8px 12px 16px; }
+    /* a dark color-scheme on the root paints the window's canvas opaque - keep
+       it on the card so the desktop still shows around it */
+    [data-theme="dark"]:has(> .widget-body.float) { color-scheme: normal; }
+    [data-theme="dark"] .float .widget { color-scheme: dark; }
+    .widget {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-height: 100%;
+      overflow: hidden;
+      background: var(--surface);
+      user-select: none;
+      word-break: keep-all;
+    }
+    .float .widget {
+      height: auto;
+      border-radius: 16px;
+      box-shadow: 0 0 0 1px rgba(15,15,15,0.07), 0 6px 16px rgba(15,15,15,0.16);
+    }
+    [data-theme="dark"] .float .widget {
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.5);
+    }
+    .widget button { font-family: inherit; }
+
+    /* title row - in the shell it is also the handle the window is dragged by */
+    .w-top {
       display: flex;
       align-items: center;
-      gap: 8px;
-      background: var(--danger);
-      color: white;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 7px 10px;
-      border-radius: var(--radius);
-      margin-bottom: 10px;
-    }
-    .w-rec-time {
-      margin-left: auto;
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      font-variant-numeric: tabular-nums;
+      gap: 2px;
+      padding: 9px 8px 0 16px;
+      min-height: 31px;
       flex-shrink: 0;
     }
-    .w-rec button {
-      border: none;
-      background: rgba(255,255,255,0.22);
-      color: white;
-      border-radius: var(--radius-sm);
-      padding: 3px 10px;
-      cursor: pointer;
-      font-size: 11px;
-      font-family: inherit;
-    }
-    .w-sec {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text2);
-      margin: 14px 0 4px;
-    }
-    .w-item {
+    .float .w-top { cursor: grab; }
+    .w-top-lab {
+      flex: 1;
+      min-width: 0;
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 7px 4px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      font-size: 13px;
-      user-select: none;
+      gap: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .w-item.done .w-title { text-decoration: line-through; color: var(--text2); }
-    .w-circle {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 1.5px solid;
+    .w-top-clock { font-size: 11.5px; font-weight: 600; color: var(--text2); font-variant-numeric: tabular-nums; margin-right: 4px; }
+    .w-top-btn {
+      width: 24px;
+      height: 22px;
+      border: none;
+      background: none;
+      color: var(--text2);
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 9px;
-      color: transparent;
+      cursor: pointer;
       flex-shrink: 0;
     }
-    .w-item.done .w-circle { color: white; }
-    .w-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .w-empty { font-size: 12px; color: var(--text2); padding: 8px 4px; }
-    .w-hint { font-size: 10px; color: var(--text2); text-align: center; margin-bottom: 4px; }
+    .w-top-btn svg.ic { width: 13px; height: 13px; stroke-width: 2; }
+    .w-top-btn:hover { background: var(--surface2); color: var(--text); }
+    .w-top-btn.close:hover { background: rgba(224,62,62,0.12); color: var(--danger); }
+    .w-live {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--danger); flex-shrink: 0;
+      animation: rec-pulse 1.6s ease-in-out infinite;
+    }
 
-    /* Pomodoro */
-    .w-pomo {
+    /* clock + today's progress */
+    .w-hero {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 2px 16px 0;
+      flex-shrink: 0;
+    }
+    .w-clock {
+      font-size: 34px; font-weight: 700; line-height: 1.1;
+      letter-spacing: -0.035em; font-variant-numeric: tabular-nums;
+    }
+    .w-stats { display: flex; flex-direction: column; gap: 6px; padding-bottom: 5px; }
+    .w-stat { width: 92px; }
+    .w-stat-top { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text2); }
+    .w-stat-top b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .w-bar { height: 4px; border-radius: 2px; background: var(--surface2); margin-top: 3px; overflow: hidden; }
+    .w-bar i { display: block; height: 100%; border-radius: 2px; background: var(--primary); transition: width 0.3s; }
+    .w-stat.habit .w-bar i { background: var(--warn); }
+
+    /* timer mode: 기록 / 뽀모도로 / 집중 모드 */
+    .w-modes {
+      display: flex;
+      gap: 2px;
+      margin: 14px 12px 0;
+      padding: 3px;
+      background: var(--surface2);
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+    .w-mode {
+      flex: 1;
       display: flex;
       align-items: center;
-      gap: 9px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 8px 9px;
-      margin: 8px 0 4px;
+      justify-content: center;
+      gap: 5px;
+      border: none;
+      background: none;
+      color: var(--text2);
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 6px 0;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
     }
-    .w-pomo.on { border-color: var(--warn); background: rgba(203,145,47,0.08); }
-    .w-pomo.on.rest { border-color: var(--success); background: rgba(15,123,108,0.08); }
-    .w-pomo.on.ready { border-color: var(--success); background: rgba(15,123,108,0.12); }
-    .w-pomo.ready .w-pomo-time { color: var(--success); font-size: 15px; }
-    .w-pomo-go.rest { background: var(--success); }
-    .w-pomo-main { flex: 1; min-width: 0; }
+    .w-mode:hover { color: var(--text); }
+    .w-mode svg.ic { width: 11px; height: 11px; stroke-width: 2.2; }
+    .w-mode.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(15,15,15,0.12); }
+    [data-theme="dark"] .w-mode.on { background: var(--border2); }
+    .w-mode.on[data-mode="rec"] svg.ic { color: var(--danger); }
+    .w-mode.on[data-mode="pomo"] svg.ic { color: var(--warn); }
+    .w-mode.on[data-mode="loop"] svg.ic { color: var(--success); }
 
-    .w-pomo-row { display: flex; align-items: center; gap: 5px; }
-    .w-pomo-row + .w-pomo-row { margin-top: 5px; }
-    .w-pomo-k { font-size: 11px; color: var(--text2); width: 26px; flex-shrink: 0; }
+    /* pomodoro settings, or the running break / finished focus */
+    .w-pomo { padding: 10px 14px 0; flex-shrink: 0; }
+    .w-pomo-row { display: flex; align-items: center; gap: 6px; }
+    .w-pomo-row + .w-pomo-row { margin-top: 8px; }
+    .w-pomo-times { justify-content: space-between; }
+    .w-step { display: flex; align-items: center; gap: 4px; }
+    .w-pomo-k { font-size: 11px; color: var(--text2); flex-shrink: 0; margin-right: 2px; }
     .w-pomo-v {
-      font-size: 13px; font-weight: 600;
+      font-size: 12.5px; font-weight: 600;
       font-variant-numeric: tabular-nums;
-      min-width: 44px; text-align: center;
+      min-width: 34px; text-align: center;
     }
     .w-pomo-v.off { color: var(--text2); font-weight: 500; }
+    .w-pomo-step {
+      border: none;
+      background: var(--surface2);
+      color: var(--text2);
+      border-radius: 6px;
+      width: 22px; height: 22px;
+      font-size: 12px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .w-pomo-step:hover { background: var(--border2); color: var(--text); }
+    .w-pomo-step svg.ic { width: 9px; height: 9px; }
     .w-pomo-sel {
       flex: 1; min-width: 0;
       font-size: 11px; font-family: inherit;
-      padding: 2px 4px;
-      border: 1px solid var(--border2); border-radius: 5px;
-      background: var(--surface); color: var(--text);
+      padding: 3px 6px;
+      height: 22px;
+      border: none; border-radius: 6px;
+      background: var(--surface2); color: var(--text);
       cursor: pointer; outline: none;
     }
-    .w-pomo-sel:focus { border-color: var(--primary); }
+    .w-pomo-sel:focus { box-shadow: 0 0 0 2px var(--primary-soft); }
+    .w-pomo-hint {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-size: 10.5px;
+      color: var(--text2);
+      text-align: center;
+      padding: 10px 14px 0;
+      flex-shrink: 0;
+    }
 
+    .w-pomo.on {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 12px 12px 0;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(203,145,47,0.10);
+    }
+    .w-pomo.on.rest, .w-pomo.on.ready { background: rgba(15,123,108,0.09); }
+    [data-theme="dark"] .w-pomo.on.rest, [data-theme="dark"] .w-pomo.on.ready { background: rgba(113,194,176,0.12); }
+    .w-pomo.on.ready { flex-direction: column; align-items: stretch; gap: 10px; }
+    .w-pomo-main { flex: 1; min-width: 0; }
     .w-pomo-time {
-      font-size: 20px; font-weight: 700;
+      font-size: 22px; font-weight: 700; line-height: 1.15;
       letter-spacing: -0.02em;
       font-variant-numeric: tabular-nums;
       color: var(--warn);
     }
-    .w-pomo.rest .w-pomo-time { color: var(--success); }
-    .w-pomo-lab { font-size: 10px; color: var(--text2); margin-top: 2px; line-height: 1.4; }
-
-    .w-pomo-step {
-      border: 1px solid var(--border2);
-      background: none;
-      color: var(--text2);
-      border-radius: 5px;
-      width: 19px; height: 19px;
-      font-size: 12px; line-height: 1;
-      cursor: pointer; font-family: inherit;
-      flex-shrink: 0;
-    }
-    .w-pomo-step:hover { background: var(--surface2); color: var(--text); }
+    .w-pomo.rest .w-pomo-time, .w-pomo.ready .w-pomo-time { color: var(--success); }
+    .w-pomo.ready .w-pomo-time { font-size: 15px; }
+    .w-pomo-lab { font-size: 10.5px; color: var(--text2); margin-top: 2px; line-height: 1.45; }
+    .w-loop { display: inline-flex; align-items: center; gap: 3px; color: var(--success); }
+    .w-loop svg.ic { width: 11px; height: 11px; stroke-width: 2; }
+    .w-focus-pomo .w-loop { margin-left: 4px; vertical-align: -1px; }
+    .w-pomo-btns { display: flex; gap: 6px; }
+    .w-pomo-btns .w-pomo-go { flex: 1; }
     .w-pomo-go {
       border: none;
-      background: var(--warn);
+      background: var(--success);
       color: #fff;
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 7px 12px;
-      font-size: 11px; font-weight: 600;
-      cursor: pointer; font-family: inherit;
+      font-size: 11.5px; font-weight: 600;
+      cursor: pointer;
       flex-shrink: 0;
     }
-    .w-pomo-go.stop { background: none; border: 1px solid var(--border2); color: var(--text2); }
+    .w-pomo-go.stop { background: var(--surface); color: var(--text2); box-shadow: 0 0 0 1px var(--border2); }
+    .w-pomo-go.stop:hover { color: var(--text); }
 
-    .w-pomo-sides { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
-    .w-pomo-side {
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
-      flex-shrink: 0; cursor: pointer; user-select: none;
+    /* progress ring for a running phase (pomoTick keeps the arc moving) */
+    .w-ring { display: block; flex-shrink: 0; }
+    .w-ring-bg { fill: none; stroke: rgba(15,15,15,0.08); }
+    [data-theme="dark"] .w-ring-bg { stroke: rgba(255,255,255,0.10); }
+    .w-ring-fg { fill: none; stroke: var(--warn); stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+    .rest .w-ring-fg { stroke: var(--success); }
+
+    /* today's to-dos and habits - the part that scrolls when the list is long */
+    .w-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      margin-top: 14px;
+      padding: 2px 8px 10px;
+      border-top: 1px solid var(--border);
     }
-    .w-pomo-side .toggle { width: 34px; height: 20px; }
-    .w-pomo-side .toggle::after { width: 14px; height: 14px; top: 3px; left: 3px; }
-    .w-pomo-side .toggle.on::after { left: 17px; }
-    .w-pomo-side-lab { font-size: 9px; color: var(--text2); letter-spacing: 0.02em; }
-    .w-pomo.off .w-pomo-main { opacity: 0.45; }
-    .w-pomo-hint {
-      font-size: 10px;
-      color: var(--warn);
-      text-align: center;
-      margin: -1px 0 4px;
-    }
-    .w-focus-pomo {
-      font-size: 12px;
+    .w-list::-webkit-scrollbar { width: 6px; }
+    .w-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    .w-list::-webkit-scrollbar-track { background: transparent; }
+    .w-sec {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      font-size: 11px;
       font-weight: 600;
-      color: var(--warn);
-      font-variant-numeric: tabular-nums;
+      color: var(--text2);
+      padding: 10px 8px 5px;
     }
+    .w-sec-n { font-weight: 500; font-variant-numeric: tabular-nums; }
+    .w-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 6px 4px 6px 8px;
+      min-height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.1s;
+    }
+    .w-item:hover { background: var(--surface2); }
+    .w-item.done .w-title { text-decoration: line-through; color: var(--text2); }
+    .w-circle {
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      border: 1.6px solid;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: transparent;
+      flex-shrink: 0;
+    }
+    .w-circle svg.ic { width: 10px; height: 10px; stroke-width: 2.6; }
+    .w-item.done .w-circle { color: white; }
+    .w-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .w-min { font-size: 10.5px; color: var(--text2); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+    .w-go, .w-del {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: none;
+      color: var(--text2);
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .w-go svg.ic { width: 10px; height: 10px; }
+    .w-del svg.ic { width: 11px; height: 11px; stroke-width: 2; }
+    .w-item:hover .w-go, .w-item:hover .w-del, .w-del[data-armed] { display: flex; }
+    .w-item:hover .w-min { display: none; }
+    .w-del:hover { color: var(--danger); background: rgba(224,62,62,0.10); }
+    .w-del[data-armed] { width: auto; padding: 0 6px; color: var(--danger); font-size: 11px; font-weight: 600; }
+    .w-empty { font-size: 12px; color: var(--text2); padding: 6px 8px 4px; }
 
-    /* Widget focus mode while recording (compact) */
+    .w-add { position: relative; display: flex; gap: 6px; margin: 0 0 4px; }
+    .w-add > svg.ic {
+      position: absolute; left: 10px; top: 50%;
+      width: 12px; height: 12px; margin-top: -6px;
+      color: var(--text2); stroke-width: 2.2; pointer-events: none;
+    }
+    .w-add-input {
+      flex: 1;
+      min-width: 0;
+      padding: 7px 10px 7px 28px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+    }
+    .w-add-input::placeholder { color: var(--text2); }
+    .w-add-input:focus { background: var(--surface); border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+    .w-pick-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border: none;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: var(--surface2);
+      color: var(--text2);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .w-pick-btn svg.ic { width: 13px; height: 13px; }
+    .w-pick-btn:hover { color: var(--text); background: var(--border2); }
+    .w-pick-btn.on { background: var(--primary); color: #fff; }
+    .w-check {
+      width: 16px;
+      height: 16px;
+      border-radius: 5px;
+      border: 1.6px solid;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: transparent;
+      flex-shrink: 0;
+    }
+    .w-check svg.ic { width: 10px; height: 10px; stroke-width: 2.6; }
+    .w-pick.picked .w-check { color: #fff; }
+    .w-item.w-pick:hover .w-min { display: inline; }   /* pick rows keep their date - no ✕ to make room for */
+
+    /* focus screen while a task is being timed */
     .w-focus {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
+      gap: 4px;
+      padding: 10px 16px 16px;
       text-align: center;
-      padding: 14px 12px;
-      min-height: 90vh;
     }
+    .widget.focus .w-focus { flex: 1; justify-content: center; }
+    .w-ring-wrap { position: relative; width: 132px; height: 132px; margin-bottom: 8px; }
+    .w-ring-wrap .w-ring { position: absolute; inset: 0; }
+    .w-ring-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .w-ring-time {
+      font-size: 30px; font-weight: 700; line-height: 1.1;
+      letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+      color: var(--warn);
+    }
+    .rest .w-ring-time { color: var(--success); }
+    .w-focus-pomo { font-size: 10.5px; color: var(--text2); margin-top: 2px; }
     .w-focus-task {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
+      gap: 7px;
+      font-size: 14px;
       font-weight: 700;
       max-width: 100%;
     }
     .w-focus-task .pc-dot { width: 9px; height: 9px; }
     .w-focus-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .w-focus-elapsed {
-      font-size: 20px;
+      font-size: 38px;
       font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--danger);
+      letter-spacing: -0.035em;
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
+      margin: 10px 0 2px;
     }
-    .w-focus-sub { font-size: 10px; color: var(--text2); }
-    .w-focus .w-date { font-size: 10px; }
+    .w-focus-sub { font-size: 11px; color: var(--text2); font-variant-numeric: tabular-nums; }
     .w-focus-stop {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       border: none;
       background: var(--danger);
       color: white;
-      border-radius: var(--radius-sm);
-      padding: 6px 18px;
+      border-radius: 999px;
+      padding: 8px 22px;
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      font-family: inherit;
-      margin-top: 4px;
+      margin-top: 12px;
     }
+    .w-focus-stop svg.ic { width: 10px; height: 10px; }
+    .w-focus-stop:hover { filter: brightness(1.06); }
 
-    /* Widget add input & per-row delete */
-    .w-add { margin: 2px 0 6px; }
-    .w-add-input {
-      width: 100%;
-      padding: 7px 10px;
-      border: 1px solid var(--border2);
-      border-radius: var(--radius-sm);
-      background: var(--surface);
-      color: var(--text);
-      font-size: 12px;
-      outline: none;
-      font-family: inherit;
-      transition: border-color 0.12s, box-shadow 0.12s;
+    /* folded: one small pill on the desktop (shell only) */
+    .w-mini {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 6px 7px 14px;
+      min-height: 46px;
+      cursor: grab;
     }
-    .w-add-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-    .w-del {
-      border: none;
-      background: none;
-      color: var(--text2);
-      cursor: pointer;
-      font-size: 11px;
-      padding: 2px 4px;
-      flex-shrink: 0;
-      font-family: inherit;
+    .w-mini-clock { font-size: 19px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+    .w-mini-sub {
+      flex: 1; min-width: 0;
+      font-size: 11px; color: var(--text2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .w-del[data-armed] { color: var(--danger); font-weight: 600; }
-    .w-min { font-size: 10px; color: var(--text2); flex-shrink: 0; }
-    .w-item.recording { background: rgba(224,62,62,0.08); border-radius: var(--radius-sm); }
-    .w-recdot { color: var(--danger); font-size: 12px; flex-shrink: 0; animation: rec-pulse 1.6s ease-in-out infinite; }
+    .w-mini-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .w-mini-time { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--danger); }
+    .w-mini-time.pomo { color: var(--warn); }
+    .w-mini-time.rest { color: var(--success); }
+    .w-mini .w-pomo-go { padding: 5px 10px; font-size: 11px; }
 
     /* 7-day sparkline in the daily planner */
     .spark {
@@ -2083,7 +2277,7 @@
 <body>
 
 <!-- ===== Icon sprite (line icons, stroked with currentColor) ===== -->
-<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" id="iconSprite" style="display:none" aria-hidden="true">
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 16.5V22M8.5 3h7l-.8 6.2 3 3.1c.5.6.1 1.7-.7 1.7H7c-.8 0-1.2-1.1-.7-1.7l3-3.1L8.5 3Z"/></symbol>
   <symbol id="i-prev" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
@@ -2096,6 +2290,8 @@
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2.5 12h2M19.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5.5 12h13"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5l-6 6M4.5 19.5l6-6"/></symbol>
   <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20.5a7.2 7.2 0 0 1 14.4 0"/></symbol>
   <symbol id="i-mind" viewBox="0 0 24 24"><path d="M15.5 20.5v-2.2a5.8 5.8 0 0 0 3.6-9.6A5.6 5.6 0 0 0 8.2 5.3 4.6 4.6 0 0 0 6.6 14v6.5"/><path d="M11 10.6h2.2M12.1 10.6v3.4"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.2 13.9 9l5.8 1.9-5.8 1.9L12 18.6l-1.9-5.8L4.3 10.9 10.1 9z"/><path d="M18.6 3.4v3M17.1 4.9h3"/></symbol>
@@ -2872,6 +3068,7 @@ document.getElementById('themeBtn').onclick = () => {
   isDark = !isDark;
   localStorage.setItem('dark', isDark ? '1' : '0');
   applyTheme();
+  renderWidget();
 };
 
 // ===== SIDEBAR TOGGLE =====
@@ -6588,6 +6785,8 @@ function pomoTick() {
     if (pipWin) {
       const el = pipWin.document.getElementById('wPomoTime');
       if (el) el.textContent = fmtCountdown(pomoLeftMs());
+      const ring = pipWin.document.getElementById('wPomoRing');
+      if (ring) setRingArc(ring);
     }
     return;
   }
@@ -6773,6 +6972,12 @@ document.getElementById('recordBtn').onclick = () => {
 
 // ===== FLOATING WIDGET (Document Picture-in-Picture) =====
 let pipWin = null;
+// folded down to one small pill - shell only, since it is the shell that
+// shrinks the window to fit; a browser PiP window keeps its own size
+let widgetMini = localStorage.getItem('widgetMini_v1') === '1';
+let widgetFitH = 0;   // height last asked of the shell
+// the list is showing other days' to-dos to pull into today (본 창의 「가져오기」)
+let widgetPicking = false;
 
 function updateWidgetBtn() {
   document.getElementById('widgetBtn').style.opacity = pipWin ? '1' : '0.55';
@@ -6791,10 +6996,10 @@ async function toggleWidget() {
       // window, so the feature check alone is misleading. The shell instead turns
       // this popup into an always-on-top mini window; it shares our origin, so the
       // code below draws into its document exactly as it did with PiP.
-      pipWin = window.open('', 'scheduler-widget', 'width=290,height=400');
+      pipWin = window.open('', 'scheduler-widget', 'width=300,height=420');
       if (!pipWin) throw new Error('popup blocked');
     } else if ('documentPictureInPicture' in window) {
-      pipWin = await documentPictureInPicture.requestWindow({ width: 270, height: 380 });
+      pipWin = await documentPictureInPicture.requestWindow({ width: 290, height: 420 });
     } else {
       showToast('이 브라우저는 위젯 모드를 지원하지 않습니다 (Chrome/Edge 116 이상 필요)');
       return;
@@ -6808,8 +7013,17 @@ async function toggleWidget() {
   const style = pipWin.document.createElement('style');
   style.textContent = document.querySelector('style').textContent;
   pipWin.document.head.appendChild(style);
+  // the widget draws the same line icons, so it needs its own copy of the sprite
+  // (kept outside <body>, which every render clears)
+  pipWin.document.documentElement.appendChild(
+    pipWin.document.importNode(document.getElementById('iconSprite'), true));
   pipWin.document.title = '스케줄러 위젯';
-  pipWin.document.body.className = 'widget-body';
+  // the shell's window is frameless and see-through, so the card floats on its own
+  pipWin.document.body.className = 'widget-body' + (shell ? ' float' : '');
+  widgetFitH = 0;
+  widgetPicking = false;
+  // the first render can land before the window has its width; measure again then
+  pipWin.addEventListener('resize', fitWidget);
   pipWin.addEventListener('pagehide', () => { pipWin = null; updateWidgetBtn(); });
   const watch = setInterval(() => {
     if (!pipWin || pipWin.closed) { pipWin = null; updateWidgetBtn(); clearInterval(watch); }
@@ -6820,207 +7034,259 @@ async function toggleWidget() {
   showToast('위젯이 열렸습니다. 다른 창 위에 항상 표시됩니다 🧩');
 }
 
+function setWidgetMini(on) {
+  widgetMini = !!on;
+  localStorage.setItem('widgetMini_v1', widgetMini ? '1' : '0');
+  renderWidget();
+}
+
+// the widget's three-way switch over the two settings above:
+// 기록 (neither), 뽀모도로, 집중 모드 (which brings pomodoro with it)
+function setTimerMode(mode) {
+  if (mode === 'loop') { setPomoLoop(true); return; }
+  if (pomoLoop) setPomoLoop(false);
+  setPomoMode(mode === 'pomo');
+}
+
+// share of the running phase still to go, for the progress ring
+const pomoFrac = () => (pomo && pomo.mins ? Math.min(1, pomoLeftMs() / (pomo.mins * 60000)) : 0);
+
+function pomoRing(size, stroke) {
+  const c = size / 2, r = c - stroke / 2, len = 2 * Math.PI * r;
+  return `<svg class="w-ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle class="w-ring-bg" cx="${c}" cy="${c}" r="${r}" stroke-width="${stroke}"/>
+    <circle class="w-ring-fg" id="wPomoRing" cx="${c}" cy="${c}" r="${r}" stroke-width="${stroke}"
+      stroke-dasharray="${len}" style="stroke-dashoffset:${len * (1 - pomoFrac())}"
+      transform="rotate(-90 ${c} ${c})"/></svg>`;
+}
+
+function setRingArc(ring) {
+  ring.style.strokeDashoffset = parseFloat(ring.getAttribute('stroke-dasharray')) * (1 - pomoFrac());
+}
+
+function wEl(doc, tag, cls, html) {
+  const el = doc.createElement(tag);
+  if (cls) el.className = cls;
+  if (html != null) el.innerHTML = html;
+  return el;
+}
+
+function wBtn(doc, cls, html, title, onClick) {
+  const b = wEl(doc, 'button', cls, html);
+  if (title) b.title = title;
+  b.onclick = e => { e.stopPropagation(); onClick(); };
+  return b;
+}
+
+// The shell's window has no title bar, so the widget's own empty areas drag it.
+function widgetDragHandle(el) {
+  if (!shell) return;
+  el.addEventListener('mousedown', e => {
+    if (e.button !== 0 || e.target.closest('button, input, select')) return;
+    e.preventDefault();
+    if (shell.widgetDrag) shellCall('widgetDrag');
+  });
+}
+
+// the title row: a label, then fold / close (the browser's PiP window has its own)
+function widgetTopBar(doc, labelHtml, extraHtml) {
+  const top = wEl(doc, 'div', 'w-top', `<span class="w-top-lab">${labelHtml}</span>${extraHtml || ''}`);
+  if (shell) {
+    top.appendChild(wBtn(doc, 'w-top-btn', ic('minus'), '접기', () => setWidgetMini(true)));
+    top.appendChild(wBtn(doc, 'w-top-btn close', ic('close'), '위젯 닫기', toggleWidget));
+  }
+  widgetDragHandle(top);
+  return top;
+}
+
+// The shell sizes its window to the card, so the widget is never taller than
+// what it shows; past the shell's cap the list scrolls inside the card instead.
+function fitWidget() {
+  if (!shell || !shell.widgetFit || !pipWin) return;
+  const doc = pipWin.document;
+  const card = doc.querySelector('.widget');
+  if (!card) return;
+  // measured uncapped: squeezed into a window that is still too short (just
+  // unfolded, or not laid out yet) the card would read short
+  card.style.maxHeight = 'none';
+  const body = pipWin.getComputedStyle(doc.body);
+  const h = Math.ceil(card.offsetHeight + parseFloat(body.paddingTop) + parseFloat(body.paddingBottom));
+  card.style.maxHeight = '';
+  if (h === widgetFitH) return;
+  widgetFitH = h;
+  shellCall('widgetFit', h);
+}
+
 function renderWidget() {
   if (!pipWin) return;
   const doc = pipWin.document;
   doc.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   const ds = todayStr();
-  // keep what the user was typing in the quick-add input across re-renders
+  // keep what the user was typing in the quick-add input, and how far the list
+  // was scrolled, across re-renders
   const prevInput = doc.querySelector('.w-add-input');
   const prevVal = prevInput ? prevInput.value : '';
   const prevFocus = !!prevInput && doc.activeElement === prevInput;
+  const prevList = doc.querySelector('.w-list');
+  const prevScroll = prevList ? prevList.scrollTop : 0;
   doc.body.innerHTML = '';
   const now = new Date();
 
-  // Recording → focus mode: only the stopwatch, clock and date
+  const card = wEl(doc, 'div', 'widget');
+  doc.body.appendChild(card);
+  if (widgetMini && shell) {
+    renderWidgetMini(doc, card, ds, now);
+  } else if (recording) {
+    // Recording → focus screen: only the timer, the task and a stop button
+    renderWidgetFocus(doc, card, ds, now);
+  } else {
+    renderWidgetMain(doc, card, ds, now);
+    const addInput = card.querySelector('.w-add-input');
+    if (prevVal) {
+      addInput.value = prevVal;
+      if (addInput.oninput) addInput.oninput();   // keep the 불러오기 search applied
+    }
+    if (prevFocus) setTimeout(() => {
+      addInput.focus();
+      addInput.setSelectionRange(addInput.value.length, addInput.value.length);
+    }, 0);
+    card.querySelector('.w-list').scrollTop = prevScroll;
+  }
+  fitWidget();
+}
+
+function renderWidgetFocus(doc, card, ds, now) {
+  const src = findPaintable(recording.id);
+  const timed = pomo && !pomoIsReady();
+  const rest = pomoIsBreak();
+  card.classList.add('focus');
+  if (rest) card.classList.add('rest');
+  card.appendChild(widgetTopBar(doc,
+    `<span class="w-live"></span>${timed ? (rest ? '휴식 중' : '집중 중') : '기록 중'}`,
+    `<span class="w-top-clock" id="wClock">${pad2(now.getHours())}:${pad2(now.getMinutes())}</span>`));
+
+  const task = `<div class="w-focus-task"><span class="pc-dot" style="background:${src ? src.color : COLORS[0]}"></span><span class="w-focus-name">${src ? escHtml(src.title) : ''}</span></div>`;
+  const today = `오늘 누적 ${fmtMinutes(paintedMinutes(ds, recording.id))}`;
+  const elapsed = fmtElapsed(Date.now() - recording.startedAt);
+  const f = wEl(doc, 'div', 'w-focus', timed ? `
+    <div class="w-ring-wrap">${pomoRing(132, 8)}
+      <div class="w-ring-center">
+        <div class="w-ring-time" id="wPomoTime">${fmtCountdown(pomoLeftMs())}</div>
+        <div class="w-focus-pomo">${rest ? '☕ 휴식' : '🍅 집중'} ${pomo.mins}분${pomoLoop
+          ? `<span class="w-loop" title="집중 모드 — 중지할 때까지 계속">${ic('repeat')}</span>` : ''}</div>
+      </div>
+    </div>
+    ${task}
+    <div class="w-focus-sub">경과 <span id="wElapsed">${elapsed}</span> · ${today}</div>` : `
+    ${task}
+    <div class="w-focus-elapsed" id="wElapsed">${elapsed}</div>
+    <div class="w-focus-sub">${today}</div>`);
+  f.appendChild(wBtn(doc, 'w-focus-stop', `${ic('stop')}중지`, '기록 중지', () => { stopRecording(); render(); }));
+  widgetDragHandle(f);
+  card.appendChild(f);
+}
+
+function renderWidgetMini(doc, card, ds, now) {
+  card.classList.add('mini');
+  const bar = wEl(doc, 'div', 'w-mini');
+  const phaseCls = pomoIsBreak() ? 'rest' : 'pomo';
   if (recording) {
     const src = findPaintable(recording.id);
-    const focus = doc.createElement('div');
-    focus.className = 'w-focus';
-    focus.innerHTML = `
-      <div class="w-focus-task"><span class="pc-dot" style="background:${src ? src.color : COLORS[0]}"></span><span class="w-focus-name">${src ? escHtml(src.title) : ''}</span></div>
-      <div class="w-focus-elapsed" id="wElapsed">${fmtElapsed(Date.now() - recording.startedAt)}</div>
-      <div class="w-focus-sub">오늘 누적 ${fmtMinutes(paintedMinutes(ds, recording.id))}</div>
-      ${pomo && !pomoIsReady() ? `<div class="w-focus-pomo">${pomoIsBreak() ? '☕ 휴식' : '🍅 집중'} <span id="wPomoTime">${fmtCountdown(pomoLeftMs())}</span>${pomoLoop ? ' · 🔁' : ''}</div>` : ''}
-      <div class="w-date"><span id="wClock">${pad2(now.getHours())}:${pad2(now.getMinutes())}</span> · ${now.getMonth()+1}/${now.getDate()} (${WEEKDAYS[now.getDay()]})</div>`;
-    const stop = doc.createElement('button');
-    stop.className = 'w-focus-stop';
-    stop.textContent = '■ 중지';
-    stop.onclick = () => { stopRecording(); render(); };
-    focus.appendChild(stop);
-    doc.body.appendChild(focus);
-    return;
-  }
-
-  const wrap = doc.createElement('div');
-  wrap.className = 'widget';
-
-  const hp = habitProgress(ds), tp = todoProgress(ds);
-  const head = doc.createElement('div');
-  head.className = 'w-head';
-  head.innerHTML = `
-    <div class="w-clock" id="wClock">${pad2(now.getHours())}:${pad2(now.getMinutes())}</div>
-    <div class="w-date">${now.getMonth()+1}/${now.getDate()} (${WEEKDAYS[now.getDay()]})${tp ? ` · ✅${tp.pct}%` : ''}${hp ? ` · 🔥${hp.pct}%` : ''}</div>`;
-  wrap.appendChild(head);
-
-  const pom = doc.createElement('div');
-  pom.className = 'w-pomo' + (pomo ? ' on' : (pomoMode ? '' : ' off')) +
-    (pomoIsBreak() ? ' rest' : '') + (pomoIsReady() ? ' ready' : '');
-  const pomMain = doc.createElement('div');
-  pomMain.className = 'w-pomo-main';
-
-  if (pomoIsReady()) {
-    // focus finished - the break waits on a press rather than starting itself
-    pomMain.innerHTML = `
-      <div class="w-pomo-time">집중 완료</div>
-      <div class="w-pomo-lab">준비되면 ${pomoBreak}분 휴식을 시작하세요</div>`;
-    pom.appendChild(pomMain);
-    const go = doc.createElement('button');
-    go.className = 'w-pomo-go rest';
-    go.textContent = '휴식 시작';
-    go.onclick = () => { takeBreak(); render(); };
-    pom.appendChild(go);
-    const stop = doc.createElement('button');
-    stop.className = 'w-pomo-go stop';
-    stop.textContent = '종료';
-    stop.onclick = () => { stopPomo(); render(); };
-    pom.appendChild(stop);
+    bar.innerHTML = `<span class="w-live"></span>
+      <span class="w-mini-name">${src ? escHtml(src.title) : ''}</span>
+      ${pomo && !pomoIsReady()
+        ? `<span class="w-mini-time ${phaseCls}" id="wPomoTime">${fmtCountdown(pomoLeftMs())}</span>`
+        : `<span class="w-mini-time" id="wElapsed">${fmtElapsed(Date.now() - recording.startedAt)}</span>`}`;
+    bar.appendChild(wBtn(doc, 'w-top-btn', ic('stop'), '기록 중지', () => { stopRecording(); render(); }));
+  } else if (pomoIsReady()) {
+    bar.innerHTML = '<span class="w-mini-name">집중 완료</span>';
+    bar.appendChild(wBtn(doc, 'w-pomo-go', '휴식 시작', `${pomoBreak}분 휴식 시작`, () => { takeBreak(); render(); }));
   } else if (pomo) {
-    pomMain.innerHTML = `
-      <div class="w-pomo-time" id="wPomoTime">${fmtCountdown(pomoLeftMs())}</div>
-      <div class="w-pomo-lab">${pomoIsBreak()
-        ? `휴식 중 · ${pomo.mins}분 → 끝나면 집중 재개`
-        : `집중 중 · ${pomo.mins}분` + (pomoBreak > 0 ? ` → 휴식 ${pomoBreak}분`
-                                                   : (pomoLoop ? ' → 바로 다음 집중' : ''))}${
-        pomoLoop ? '<br>🔁 집중 모드 · 중지할 때까지 계속' : ''}</div>`;
-    pom.appendChild(pomMain);
-    const stop = doc.createElement('button');
-    stop.className = 'w-pomo-go stop';
-    stop.textContent = '중지';
-    stop.onclick = () => { if (recording) stopRecording(); else stopPomo(); render(); };
-    pom.appendChild(stop);
+    bar.innerHTML = `<span class="w-mini-name">${pomoIsBreak() ? '☕ 휴식 중' : '🍅 집중 중'}</span>
+      <span class="w-mini-time ${phaseCls}" id="wPomoTime">${fmtCountdown(pomoLeftMs())}</span>`;
   } else {
-    // one row per phase, each with its own -/+ so the two are set apart
-    const row = (label, value, dec, inc, dim) => {
-      const r = doc.createElement('div');
-      r.className = 'w-pomo-row';
-      const k = doc.createElement('span');
-      k.className = 'w-pomo-k';
-      k.textContent = label;
-      const minus = doc.createElement('button');
-      minus.className = 'w-pomo-step';
-      minus.textContent = '−';
-      minus.title = label + ' 5분 줄이기';
-      minus.onclick = dec;
-      const v = doc.createElement('span');
-      v.className = 'w-pomo-v' + (dim ? ' off' : '');
-      v.textContent = value;
-      const plus = doc.createElement('button');
-      plus.className = 'w-pomo-step';
-      plus.textContent = '+';
-      plus.title = label + ' 5분 늘리기';
-      plus.onclick = inc;
-      r.appendChild(k); r.appendChild(minus); r.appendChild(v); r.appendChild(plus);
-      return r;
-    };
-    pomMain.appendChild(row('집중', `${pomoWork}분`,
-      () => adjustPomoWork(-5), () => adjustPomoWork(5), false));
-    pomMain.appendChild(row('휴식', pomoBreak ? `${pomoBreak}분` : '없음',
-      () => adjustPomoBreak(-5), () => adjustPomoBreak(5), !pomoBreak));
-
-    // where the end-of-phase chime plays - only the shell can pick a device
-    if (shell) {
-      const r = doc.createElement('div');
-      r.className = 'w-pomo-row';
-      const k = doc.createElement('span');
-      k.className = 'w-pomo-k';
-      k.textContent = '소리';
-      const sel = doc.createElement('select');
-      sel.className = 'w-pomo-sel';
-      sel.id = 'wSoundSel';
-      fillSoundSelect(sel);
-      sel.onchange = () => {
-        setPomoSound(sel.selectedOptions[0]);
-        sel.title = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
-      };
-      const test = doc.createElement('button');
-      test.className = 'w-pomo-step';
-      test.textContent = '▶';
-      test.title = '미리 듣기';
-      test.onclick = async () => {
-        test.textContent = '♪';
-        await testPomoSound();
-        setTimeout(() => { test.textContent = '▶'; }, 1200);
-      };
-      r.appendChild(k); r.appendChild(sel); r.appendChild(test);
-      pomMain.appendChild(r);
-    }
-    pom.appendChild(pomMain);
-
-    // the widget only switches the modes on; a to-do starts the actual session
-    const sides = doc.createElement('div');
-    sides.className = 'w-pomo-sides';
-    const toggle = (label, title, on, flip) => {
-      const side = doc.createElement('div');
-      side.className = 'w-pomo-side';
-      side.title = title;
-      side.innerHTML = `<div class="toggle${on ? ' on' : ''}"></div>
-        <div class="w-pomo-side-lab">${label}</div>`;
-      side.onclick = flip;
-      sides.appendChild(side);
-    };
-    toggle('뽀모도로', '뽀모도로 모드', pomoMode, () => setPomoMode(!pomoMode));
-    toggle('집중 모드', '집중 모드 — 중지할 때까지 같은 할 일로 집중·휴식을 버튼 없이 계속 이어갑니다',
-      pomoLoop, () => setPomoLoop(!pomoLoop));
-    pom.appendChild(sides);
+    const todos = getDayTaskList(ds);
+    const left = todos.filter(ev => !isTodoDone(ev, ds)).length;
+    bar.innerHTML = `<span class="w-mini-clock" id="wClock">${pad2(now.getHours())}:${pad2(now.getMinutes())}</span>
+      <span class="w-mini-sub">${!todos.length ? `${now.getMonth()+1}월 ${now.getDate()}일 ${WEEKDAYS[now.getDay()]}요일`
+        : left ? `할 일 ${left}개 남음` : '오늘 할 일 모두 완료'}</span>`;
   }
-  wrap.appendChild(pom);
+  bar.appendChild(wBtn(doc, 'w-top-btn', ic('expand'), '펼치기', () => setWidgetMini(false)));
+  bar.appendChild(wBtn(doc, 'w-top-btn close', ic('close'), '위젯 닫기', toggleWidget));
+  widgetDragHandle(bar);
+  card.appendChild(bar);
+}
 
-  if (pomoMode && !pomo) {
-    const ph = doc.createElement('div');
-    ph.className = 'w-pomo-hint';
-    ph.textContent = pomoLoop
-      ? '할 일을 누르면 시작 · 중지할 때까지 계속 이어집니다'
-      : '할 일을 누르면 집중이 시작됩니다';
-    wrap.appendChild(ph);
+function renderWidgetMain(doc, card, ds, now) {
+  card.appendChild(widgetTopBar(doc, `${now.getMonth()+1}월 ${now.getDate()}일 ${WEEKDAYS[now.getDay()]}요일`));
+
+  const todos = getDayTaskList(ds);
+  const todoDone = todos.filter(ev => isTodoDone(ev, ds)).length;
+  const habitDone = habits.filter(hb => (habitChecks[ds] || []).includes(hb.id)).length;
+  const stat = (cls, label, done, total) => `
+    <div class="w-stat ${cls}">
+      <div class="w-stat-top"><span>${label}</span><b>${done}/${total}</b></div>
+      <div class="w-bar"><i style="width:${Math.round(done / total * 100)}%"></i></div>
+    </div>`;
+  const hero = wEl(doc, 'div', 'w-hero', `
+    <div class="w-clock" id="wClock">${pad2(now.getHours())}:${pad2(now.getMinutes())}</div>
+    <div class="w-stats">${todos.length ? stat('todo', '할 일', todoDone, todos.length) : ''}${
+      habits.length ? stat('habit', '습관', habitDone, habits.length) : ''}</div>`);
+  widgetDragHandle(hero);
+  card.appendChild(hero);
+
+  if (pomo) {
+    card.appendChild(widgetPomoSession(doc));
+  } else {
+    // the widget only picks the mode; a to-do starts the actual session
+    const modes = wEl(doc, 'div', 'w-modes');
+    const cur = pomoLoop ? 'loop' : pomoMode ? 'pomo' : 'rec';
+    [['rec', 'record', '기록', '할 일을 누르면 시간을 기록합니다'],
+     ['pomo', 'timer', '뽀모도로', '뽀모도로 — 할 일을 누르면 집중 타이머가 시작되고, 끝나면 휴식 버튼을 기다립니다'],
+     ['loop', 'repeat', '집중 모드', '집중 모드 — 중지할 때까지 같은 할 일로 집중·휴식을 버튼 없이 계속 이어갑니다'],
+    ].forEach(([mode, icon, label, title]) => {
+      const b = wBtn(doc, 'w-mode' + (mode === cur ? ' on' : ''), `${ic(icon)}<span>${label}</span>`,
+        title, () => setTimerMode(mode));
+      b.dataset.mode = mode;
+      modes.appendChild(b);
+    });
+    card.appendChild(modes);
+    if (pomoMode) card.appendChild(widgetPomoSettings(doc));
+    card.appendChild(wEl(doc, 'div', 'w-pomo-hint',
+      !pomoMode ? '할 일을 누르면 시간 기록이 시작됩니다'
+        : pomoLoop ? '할 일을 누르면 시작 · 중지할 때까지 계속 이어집니다'
+        : '할 일을 누르면 집중이 시작됩니다'));
   }
 
-  const hint = doc.createElement('div');
-  hint.className = 'w-hint';
-  hint.textContent = pomoMode
-    ? '줄 클릭 = 집중 시작/중지 🍅 · 동그라미 = 완료 체크'
-    : '줄 클릭 = 시간 기록 시작/중지 ⏺ · 동그라미 = 완료 체크';
-  wrap.appendChild(hint);
+  const list = wEl(doc, 'div', 'w-list');
 
   // one row for a todo or habit: circle checks, row toggles live recording,
   // ✕ deletes (press twice to confirm)
   const addWidgetRow = (id, title, color, checked, onCheck, onDelete) => {
     const isRec = recording && recording.id === id;
     const min = paintedMinutes(ds, id);
-    const row = doc.createElement('div');
-    row.className = 'w-item' + (checked ? ' done' : '') + (isRec ? ' recording' : '');
-    row.innerHTML = `
-      <span class="w-circle" style="border-color:${color}${checked ? `;background:${color}` : ''}">✓</span>
+    const row = wEl(doc, 'div', 'w-item' + (checked ? ' done' : ''), `
+      <span class="w-circle" style="border-color:${color}${checked ? `;background:${color}` : ''}">${ic('check')}</span>
       <span class="w-title">${escHtml(title)}</span>
-      ${min ? `<span class="w-min">${min}분</span>` : ''}
-      ${isRec ? '<span class="w-recdot">⏺</span>' : ''}
-      <button class="w-del" title="삭제 (두 번 눌러 확인)">✕</button>`;
+      ${min ? `<span class="w-min">${fmtMinutes(min)}</span>` : ''}
+      <span class="w-go" title="${pomoMode ? '집중 시작' : '기록 시작'}">${ic('play')}</span>
+      <button class="w-del" title="삭제 (두 번 눌러 확인)">${ic('close')}</button>`);
     row.querySelector('.w-circle').onclick = e => {
       e.stopPropagation();
       onCheck();
       render();
     };
-    row.querySelector('.w-del').onclick = e => {
+    const del = row.querySelector('.w-del');
+    del.onclick = e => {
       e.stopPropagation();
-      const btn = e.target;
-      if (btn.dataset.armed) {
+      if (del.dataset.armed) {
         onDelete();
         render();
       } else {
-        btn.dataset.armed = '1';
-        btn.textContent = '확인';
+        del.dataset.armed = '1';
+        del.textContent = '확인';
         setTimeout(() => {
-          if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = '✕'; }
+          if (del.isConnected) { delete del.dataset.armed; del.innerHTML = ic('close'); }
         }, 2500);
       }
     };
@@ -7029,18 +7295,21 @@ function renderWidget() {
       else startRecording(id);
       render();
     };
-    wrap.appendChild(row);
+    list.appendChild(row);
   };
 
-  const secT = doc.createElement('div');
-  secT.className = 'w-sec';
-  secT.textContent = '오늘 할일';
-  wrap.appendChild(secT);
+  list.appendChild(wEl(doc, 'div', 'w-sec', widgetPicking
+    ? '<span>할일 불러오기</span><span class="w-sec-n">누르면 오늘에 추가</span>'
+    : `<span>오늘 할일</span>${todos.length ? `<span class="w-sec-n">${todoDone}/${todos.length}</span>` : ''}`));
 
-  // quick add: type a title and press Enter
-  const addBox = doc.createElement('div');
-  addBox.className = 'w-add';
-  addBox.innerHTML = '<input class="w-add-input" placeholder="＋ 할일 입력 후 Enter">';
+  // quick add: type a title and press Enter. While pulling in, the same box
+  // searches the list, and Enter still adds what was typed as a new to-do.
+  const addBox = wEl(doc, 'div', 'w-add', `${ic('plus')}<input class="w-add-input" placeholder="${
+    widgetPicking ? '검색 · 새 할일은 Enter' : '할일 추가 후 Enter'}">`);
+  addBox.appendChild(wBtn(doc, 'w-pick-btn' + (widgetPicking ? ' on' : ''),
+    widgetPicking ? '완료' : `${ic('inbox')}불러오기`,
+    '다른 날짜·월간·주간 할일을 오늘로 불러오기',
+    () => { widgetPicking = !widgetPicking; renderWidget(); }));
   const addInput = addBox.querySelector('input');
   addInput.onkeydown = e => {
     if (e.key !== 'Enter') return;
@@ -7058,23 +7327,19 @@ function renderWidget() {
       categoryId: twin ? twin.categoryId || null : null,
       desc: '', completed: false,
     });
+    widgetPicking = false;   // back to today's list, where the new one shows
     saveEvents();
     render();
   };
-  wrap.appendChild(addBox);
-  if (prevVal) addInput.value = prevVal;
-  if (prevFocus) setTimeout(() => {
-    addInput.focus();
-    addInput.setSelectionRange(addInput.value.length, addInput.value.length);
-  }, 0);
+  list.appendChild(addBox);
 
-  const todos = getDayTaskList(ds);
-  if (!todos.length) {
-    const e = doc.createElement('div');
-    e.className = 'w-empty';
-    e.textContent = '오늘 할일이 없습니다';
-    wrap.appendChild(e);
+  if (widgetPicking) {
+    addInput.oninput = widgetPickList(doc, list, ds, addInput);
+    card.appendChild(list);
+    return;
   }
+
+  if (!todos.length) list.appendChild(wEl(doc, 'div', 'w-empty', '오늘 할일이 없습니다'));
   todos.forEach(ev => {
     const done = isTodoDone(ev, ds);
     addWidgetRow(ev.id, ev.title, ev.color || COLORS[0], done,
@@ -7092,10 +7357,8 @@ function renderWidget() {
   });
 
   if (habits.length) {
-    const secH = doc.createElement('div');
-    secH.className = 'w-sec';
-    secH.textContent = '습관';
-    wrap.appendChild(secH);
+    list.appendChild(wEl(doc, 'div', 'w-sec',
+      `<span>습관</span><span class="w-sec-n">${habitDone}/${habits.length}</span>`));
     habits.forEach(hb => {
       const checked = (habitChecks[ds] || []).includes(hb.id);
       addWidgetRow(hb.id, hb.name, hb.color, checked,
@@ -7104,7 +7367,135 @@ function renderWidget() {
     });
   }
 
-  doc.body.appendChild(wrap);
+  card.appendChild(list);
+}
+
+// 불러오기: to-dos from other days (and month/week goals) that can be pulled into
+// today, as the main window's 「가져오기」 does. Ones already pulled in stay
+// listed, ticked, so a second press puts them back. Returns the search filter.
+function widgetPickList(doc, list, ds, input) {
+  const today = dayTasks[ds] || [];
+  const picks = events
+    .filter(ev => ev.isTodo && (ev.scope || !evMatchesDate(ev, ds)))   // not already on today by itself
+    .filter(ev => today.includes(ev.id) || !isTodoDone(ev, ds))
+    .sort((a, b) =>
+      (today.includes(b.id) ? 1 : 0) - (today.includes(a.id) ? 1 : 0) ||
+      prioRank(a) - prioRank(b) ||
+      (b.date || '').localeCompare(a.date || ''));
+
+  const rows = picks.map(ev => {
+    const picked = today.includes(ev.id);
+    const color = ev.color || COLORS[0];
+    const when = ev.scope === 'month' ? '월간'
+      : ev.scope === 'week' ? '주간'
+      : ev.date ? ev.date.slice(5).split('-').map(Number).join('/')
+      : '날짜 없음';
+    const row = wEl(doc, 'div', 'w-item w-pick' + (picked ? ' picked' : ''), `
+      <span class="w-check" style="border-color:${color}${picked ? `;background:${color}` : ''}">${ic('check')}</span>
+      <span class="w-title">${escHtml(ev.title)}</span>
+      <span class="w-min">${when}</span>`);
+    row.dataset.title = (ev.title || '').toLowerCase();
+    row.onclick = () => {
+      const ids = dayTasks[ds] || (dayTasks[ds] = []);
+      const i = ids.indexOf(ev.id);
+      if (i >= 0) ids.splice(i, 1);
+      else ids.push(ev.id);
+      if (!ids.length) delete dayTasks[ds];
+      saveEvents();
+      render();
+    };
+    list.appendChild(row);
+    return row;
+  });
+
+  if (!rows.length) list.appendChild(wEl(doc, 'div', 'w-empty', '불러올 할일이 없습니다'));
+  const none = wEl(doc, 'div', 'w-empty', '일치하는 할일이 없습니다 · Enter로 새로 추가');
+  list.appendChild(none);
+
+  const filter = () => {
+    const term = input.value.trim().toLowerCase();
+    let shown = 0;
+    rows.forEach(r => {
+      const hit = !term || r.dataset.title.includes(term);
+      r.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    none.style.display = rows.length && !shown ? '' : 'none';
+  };
+  filter();
+  return () => { filter(); fitWidget(); };
+}
+
+// pomodoro mode on, nothing running: focus and break lengths, and the chime
+function widgetPomoSettings(doc) {
+  const box = wEl(doc, 'div', 'w-pomo');
+  // the two phases side by side, each with its own -/+
+  const times = wEl(doc, 'div', 'w-pomo-row w-pomo-times');
+  const stepper = (label, value, dim, dec, inc) => {
+    const g = wEl(doc, 'div', 'w-step', `<span class="w-pomo-k">${label}</span>`);
+    g.appendChild(wBtn(doc, 'w-pomo-step', ic('minus'), label + ' 5분 줄이기', dec));
+    g.appendChild(wEl(doc, 'span', 'w-pomo-v' + (dim ? ' off' : ''), value));
+    g.appendChild(wBtn(doc, 'w-pomo-step', ic('plus'), label + ' 5분 늘리기', inc));
+    return g;
+  };
+  times.appendChild(stepper('집중', `${pomoWork}분`, false,
+    () => adjustPomoWork(-5), () => adjustPomoWork(5)));
+  times.appendChild(stepper('휴식', pomoBreak ? `${pomoBreak}분` : '없음', !pomoBreak,
+    () => adjustPomoBreak(-5), () => adjustPomoBreak(5)));
+  box.appendChild(times);
+
+  // where the end-of-phase chime plays - only the shell can pick a device
+  if (shell) {
+    const r = wEl(doc, 'div', 'w-pomo-row', '<span class="w-pomo-k">소리</span>');
+    const sel = wEl(doc, 'select', 'w-pomo-sel');
+    sel.id = 'wSoundSel';
+    fillSoundSelect(sel);
+    sel.onchange = () => {
+      setPomoSound(sel.selectedOptions[0]);
+      sel.title = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+    };
+    const test = wBtn(doc, 'w-pomo-step', ic('play'), '미리 듣기', async () => {
+      test.textContent = '♪';
+      await testPomoSound();
+      setTimeout(() => { test.innerHTML = ic('play'); }, 1200);
+    });
+    r.appendChild(sel);
+    r.appendChild(test);
+    box.appendChild(r);
+  }
+  return box;
+}
+
+// a session is under way without a task being timed: the break, or the pause
+// after a finished focus
+function widgetPomoSession(doc) {
+  if (pomoIsReady()) {
+    // focus finished - the break waits on a press rather than starting itself
+    const box = wEl(doc, 'div', 'w-pomo on ready', `
+      <div class="w-pomo-main">
+        <div class="w-pomo-time">집중 완료</div>
+        <div class="w-pomo-lab">준비되면 ${pomoBreak}분 휴식을 시작하세요</div>
+      </div>`);
+    const btns = wEl(doc, 'div', 'w-pomo-btns');
+    btns.appendChild(wBtn(doc, 'w-pomo-go rest', '휴식 시작', '', () => { takeBreak(); render(); }));
+    btns.appendChild(wBtn(doc, 'w-pomo-go stop', '종료', '', () => { stopPomo(); render(); }));
+    box.appendChild(btns);
+    return box;
+  }
+  const rest = pomoIsBreak();
+  const box = wEl(doc, 'div', 'w-pomo on' + (rest ? ' rest' : ''), `
+    ${pomoRing(46, 5)}
+    <div class="w-pomo-main">
+      <div class="w-pomo-time" id="wPomoTime">${fmtCountdown(pomoLeftMs())}</div>
+      <div class="w-pomo-lab">${rest
+        ? '휴식 중 · 끝나면 집중 재개'
+        : '집중 중' + (pomoBreak > 0 ? ` · 다음은 휴식 ${pomoBreak}분`
+                                    : (pomoLoop ? ' · 바로 다음 집중' : ''))}${
+        pomoLoop ? `<br><span class="w-loop">${ic('repeat')}집중 모드 · 중지할 때까지 계속</span>` : ''}</div>
+    </div>`);
+  box.appendChild(wBtn(doc, 'w-pomo-go stop', '중지', '',
+    () => { if (recording) stopRecording(); else stopPomo(); render(); }));
+  return box;
 }
 
 document.getElementById('widgetBtn').onclick = toggleWidget;

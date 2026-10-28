@@ -10,10 +10,10 @@ from __future__ import annotations
 import os
 import sys
 
-from PySide6.QtCore import (QCoreApplication, QFile, QIODevice, QThreadPool,
-                            QTimer, QUrl, Qt)
+from PySide6.QtCore import (QCoreApplication, QFile, QIODevice, QPoint, QSettings,
+                            QThreadPool, QTimer, QUrl, Qt)
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QGuiApplication, QIcon
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import (QWebEnginePage, QWebEngineProfile, QWebEngineScript,
                                       QWebEngineSettings)
@@ -29,6 +29,11 @@ INDEX = os.path.join(ROOT, "index.html")
 DATA_DIR = os.path.join(ROOT, "data")
 ICON = os.path.join(os.environ.get("APPDATA", ""), "Scheduler", "scheduler.ico")
 PROFILE_DIR = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Scheduler", "webprofile")
+# per-PC window state (where the widget was left) - not part of the synced data
+SETTINGS = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Scheduler", "shell.ini")
+
+WIDGET_W = 300        # the page's card is 276 wide; the rest is room for its shadow
+WIDGET_MAX_H = 640    # past this the to-do list scrolls inside the card
 
 # Injected before the page's own scripts so index.html can detect the shell and
 # skip every browser-only storage path. qwebchannel.js is inlined rather than
@@ -71,6 +76,56 @@ class ShellPage(QWebEnginePage):
         return self._owner.open_widget_window()
 
 
+class WidgetWindow(QWebEngineView):
+    """The floating widget: frameless and see-through, so the page's rounded card
+    sits straight on the desktop like a desk pet. It stays out of the taskbar,
+    the page drags it by its empty areas and sizes it to the card, and it comes
+    back where it was last left."""
+
+    def __init__(self, profile):
+        super().__init__()
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowTitle("스케줄러 위젯")
+        if os.path.exists(ICON):
+            self.setWindowIcon(QIcon(ICON))
+        page = QWebEnginePage(profile, self)
+        page.setBackgroundColor(Qt.transparent)
+        self.setPage(page)
+        # widget.close() from the page, or the main window's button, both end here
+        page.windowCloseRequested.connect(self.close)
+        self.resize(WIDGET_W, 420)
+        self.move(self._start_pos())
+
+    @staticmethod
+    def _start_pos() -> QPoint:
+        pos = QSettings(SETTINGS, QSettings.IniFormat).value("widget/pos")
+        # a monitor unplugged since then would leave it off screen
+        if isinstance(pos, QPoint) and QGuiApplication.screenAt(pos + QPoint(WIDGET_W // 2, 20)):
+            return pos
+        avail = QGuiApplication.primaryScreen().availableGeometry()
+        return QPoint(avail.right() - WIDGET_W - 24, avail.top() + 60)
+
+    def drag(self) -> None:
+        handle = self.windowHandle()
+        if handle:
+            handle.startSystemMove()
+
+    def fit(self, height: int) -> None:
+        avail = (self.screen() or QGuiApplication.primaryScreen()).availableGeometry()
+        h = max(56, min(int(height), WIDGET_MAX_H, avail.height()))
+        if h == self.height():
+            return
+        # growing past the bottom of the screen: lift it rather than cut the card off
+        y = max(avail.top(), min(self.y(), avail.bottom() + 1 - h))
+        self.setGeometry(self.x(), y, WIDGET_W, h)
+
+    def closeEvent(self, event) -> None:
+        QSettings(SETTINGS, QSettings.IniFormat).setValue("widget/pos", self.pos())
+        super().closeEvent(event)
+
+
 class Window(QMainWindow):
     def __init__(self, app: QApplication):
         super().__init__()
@@ -108,7 +163,7 @@ class Window(QMainWindow):
         self.setCentralWidget(self.view)
 
         self.storage = Storage(DATA_DIR)
-        self.bridge = Bridge(self.storage, on_quit=self.quit_app)
+        self.bridge = Bridge(self.storage, on_quit=self.quit_app, widget=self)
         self.channel = QWebChannel(self.page)
         self.channel.registerObject("shell", self.bridge)
         self.page.setWebChannel(self.channel)
@@ -120,27 +175,27 @@ class Window(QMainWindow):
     # ---------- floating widget ----------
 
     def open_widget_window(self):
-        """Creates the small always-on-top window a window.open() call lands in."""
+        """Creates the floating window a window.open() call lands in."""
         if self._widget_view is not None:
             self._widget_view.close()
-        view = QWebEngineView()
-        view.setAttribute(Qt.WA_DeleteOnClose)
-        view.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
-        view.setWindowTitle("스케줄러 위젯")
-        if os.path.exists(ICON):
-            view.setWindowIcon(QIcon(ICON))
-        page = QWebEnginePage(self.profile, view)
-        view.setPage(page)
-        # widget.close() from the page, or the X button, both end here
-        page.windowCloseRequested.connect(view.close)
-        view.destroyed.connect(lambda *_: setattr(self, "_widget_view", None))
-
-        avail = self.app.primaryScreen().availableGeometry()
-        view.resize(290, 400)
-        view.move(avail.right() - 290 - 24, avail.top() + 60)
+        view = WidgetWindow(self.profile)
+        # the old window is deleted later - don't let it clear the new one
+        view.destroyed.connect(lambda *_: self._widget_gone(view))
         view.show()
         self._widget_view = view
-        return page
+        return view.page()
+
+    def _widget_gone(self, view) -> None:
+        if self._widget_view is view:
+            self._widget_view = None
+
+    def drag_widget(self) -> None:
+        if self._widget_view is not None:
+            self._widget_view.drag()
+
+    def fit_widget(self, height: int) -> None:
+        if self._widget_view is not None:
+            self._widget_view.fit(height)
 
     # ---------- tray ----------
 

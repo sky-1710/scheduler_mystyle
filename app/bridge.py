@@ -47,10 +47,11 @@ class Bridge(QObject):
     # earphones or a Bluetooth device came or went - the widget's picker re-lists
     audioOutputsChanged = Signal()
 
-    def __init__(self, storage, on_quit=None):
+    def __init__(self, storage, on_quit=None, widget=None):
         super().__init__()
         self.storage = storage
         self._on_quit = on_quit
+        self._widget = widget      # the main window, which owns the floating widget
         self.gcal = GCal(storage.dir)
         self._gcal_busy = False
         self._media = QMediaDevices(self)
@@ -166,6 +167,20 @@ class Bridge(QObject):
             return json.dumps({"ok": True})
         except Exception as err:
             return json.dumps({"ok": False, "error": str(err)})
+
+    # ---------- floating widget ----------
+
+    @Slot()
+    def widgetDrag(self) -> None:
+        """The widget has no title bar; a press on its empty areas moves it."""
+        if self._widget:
+            self._widget.drag_widget()
+
+    @Slot(int)
+    def widgetFit(self, height: int) -> None:
+        """The page measured its card; the window takes that height."""
+        if self._widget:
+            self._widget.fit_widget(height)
 
     # ---------- window ----------
 

@@ -57,9 +57,14 @@ setTimeout(async () => {
   await step('💾 메뉴에는 더 이상 선택란이 없다', () =>
     !w.document.getElementById('soundRow') && !w.document.getElementById('soundSelect'));
 
-  await step('위젯 뽀모도로 칸에 「소리」 줄이 있고, 기본 장치 + 연결된 장치가 나열된다', async () => {
+  await step('기록 모드에서는 「소리」 줄이 없다 (뽀모도로 알림 전용)', async () => {
     await w.toggleWidget();
     await tick();
+    return !sel() && !!widgetWin.document.querySelector('.w-mode');
+  });
+
+  await step('뽀모도로 모드의 설정 칸에 「소리」 줄이 있고, 기본 장치 + 연결된 장치가 나열된다', () => {
+    w.setTimerMode('pomo');
     const s = sel();
     const row = s && s.closest('.w-pomo-row');
     const opts = s ? [...s.options].map(o => o.value) : [];
@@ -74,11 +79,13 @@ setTimeout(async () => {
     return p && p.id === 'dev-buds' && p.name === '헤드폰(Galaxy Buds)';
   });
 
-  await step('뽀모도로 모드를 켜고 끄며 다시 그려도 선택이 유지된다', () => {
-    w.setPomoMode(true);
+  await step('모드를 바꾸며 다시 그려도 선택이 유지된다', () => {
+    w.setTimerMode('loop');
     const on = sel() && sel().value === 'dev-buds';
-    w.setPomoMode(false);
-    return on && sel() && sel().value === 'dev-buds';
+    w.setTimerMode('rec');
+    const hidden = !sel();
+    w.setTimerMode('pomo');
+    return on && hidden && sel() && sel().value === 'dev-buds';
   });
 
   await step('뽀모도로 알람이 고른 장치로 요청된다', () => {

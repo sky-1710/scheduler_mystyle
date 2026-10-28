@@ -303,25 +303,31 @@ setTimeout(async () => {
     return off && loopPref() === '0' && ready;
   });
 
-  // 위젯: 스위치 두 개가 보이고, 집중 모드 스위치가 동작하는지 (PiP 창은 빈 문서로 대체)
+  // 위젯: 「기록·뽀모도로·집중 모드」 세 칸 전환이 동작하는지 (PiP 창은 빈 문서로 대체)
   const widgetOk = await (async () => {
     await w.toggleWidget();
     const wd = widgetWin.document;
-    const labels = () => [...wd.querySelectorAll('.w-pomo-side-lab')].map(e => e.textContent.trim());
-    const before = labels().join('|') === '뽀모도로|집중 모드';
-    wd.querySelectorAll('.w-pomo-side')[1].click();
-    const ons = [...wd.querySelectorAll('.w-pomo-side .toggle')].map(e => e.classList.contains('on'));
+    const modes = () => [...wd.querySelectorAll('.w-mode')];
+    const pomoPref = () => w.localStorage.getItem('pomoMode_v1');
+    const before = modes().map(e => e.textContent.trim()).join('|') === '기록|뽀모도로|집중 모드' &&
+                   modes()[0].classList.contains('on');
+    modes()[2].click();
+    const both = modes()[2].classList.contains('on') && pomoPref() === '1' && loopPref() === '1';
     const hint = (wd.querySelector('.w-pomo-hint') || {}).textContent || '';
     at(t);
     w.startRecording('P1');                         // 위젯은 집중 화면으로 바뀐다
-    const focusLine = (wd.querySelector('.w-focus-pomo') || {}).textContent || '';
+    const focusLoop = !!wd.querySelector('.w-focus-pomo .w-loop');   // 반복 표시
     t += 25 * MIN + 500; at(t); w.pomoTick();     // 휴식: 본 위젯에 진행 표시
     const lab = (wd.querySelector('.w-pomo-lab') || {}).textContent || '';
-    w.stopPomo(); w.setPomoMode(false);
-    return before && ons.join(',') === 'true,true' && /중지할 때까지 계속/.test(hint) &&
-           /🔁/.test(focusLine) && /휴식 중/.test(lab) && /집중 모드/.test(lab);
+    w.stopPomo();
+    modes()[1].click();                             // 뽀모도로: 집중 모드만 꺼진다
+    const pomoOnly = modes()[1].classList.contains('on') && pomoPref() === '1' && loopPref() === '0';
+    modes()[0].click();                             // 기록: 둘 다 꺼진다
+    const off = modes()[0].classList.contains('on') && pomoPref() === '0' && loopPref() === '0';
+    return before && both && /중지할 때까지 계속/.test(hint) && focusLoop &&
+           /휴식 중/.test(lab) && /집중 모드/.test(lab) && pomoOnly && off;
   })();
-  step('위젯에 「뽀모도로」「집중 모드」 스위치가 있고, 집중 모드를 누르면 둘 다 켜진다', () => widgetOk);
+  step('위젯 「기록·뽀모도로·집중 모드」 전환: 집중 모드는 둘 다 켜고, 뽀모도로는 집중 모드만 끄고, 기록은 모두 끈다', () => widgetOk);
 
   step('카운트다운 표기', () =>
     w.fmtCountdown(90000) === '01:30' && w.fmtCountdown(0) === '00:00' &&
