@@ -1623,6 +1623,17 @@
     .w-mini-time.pomo { color: var(--warn); }
     .w-mini-time.rest { color: var(--success); }
     .w-mini .w-pomo-go { padding: 5px 10px; font-size: 11px; }
+    .w-mini-bar {
+      height: 4px;
+      margin: -4px 14px 10px;
+      border-radius: 2px;
+      background: rgba(15,15,15,0.08);
+      overflow: hidden;
+      cursor: grab;
+    }
+    [data-theme="dark"] .w-mini-bar { background: rgba(255,255,255,0.10); }
+    .w-mini-bar i { display: block; height: 100%; border-radius: 2px; background: var(--warn); transition: width 1s linear; }
+    .rest .w-mini-bar i { background: var(--success); }
 
     /* 7-day sparkline in the daily planner */
     .spark {
@@ -6787,6 +6798,8 @@ function pomoTick() {
       if (el) el.textContent = fmtCountdown(pomoLeftMs());
       const ring = pipWin.document.getElementById('wPomoRing');
       if (ring) setRingArc(ring);
+      const bar = pipWin.document.getElementById('wPomoBar');
+      if (bar) bar.style.width = `${pomoFrac() * 100}%`;
     }
     return;
   }
@@ -7215,6 +7228,15 @@ function renderWidgetMini(doc, card, ds, now) {
   bar.appendChild(wBtn(doc, 'w-top-btn close', ic('close'), '위젯 닫기', toggleWidget));
   widgetDragHandle(bar);
   card.appendChild(bar);
+
+  // a pomodoro phase is running: what is left of it, as a bar under the pill
+  // (pomoTick keeps it moving)
+  if (pomo && !pomoIsReady()) {
+    if (pomoIsBreak()) card.classList.add('rest');
+    const track = wEl(doc, 'div', 'w-mini-bar', `<i id="wPomoBar" style="width:${pomoFrac() * 100}%"></i>`);
+    widgetDragHandle(track);
+    card.appendChild(track);
+  }
 }
 
 function renderWidgetMain(doc, card, ds, now) {

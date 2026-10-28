@@ -173,6 +173,21 @@ setTimeout(async () => {
     return shows && w.localStorage.getItem('recording_v1') === null && !!q('#wClock');
   });
 
+  await step('접힌 채 뽀모도로: 알약은 그대로(이름·남은 시간)이고 아래에 남은 시간 바가 붙는다', () => {
+    const noBarIdle = !q('#wPomoBar');
+    w.setTimerMode('pomo');
+    w.startRecording('T1');
+    const bar = q('.widget.mini .w-mini-bar #wPomoBar');
+    const ok = !!bar && parseFloat(bar.style.width) > 99 &&
+      /첫 할일/.test(q('.w-mini-name').textContent) && !!q('#wPomoTime');
+    w.stopRecording();
+    w.setTimerMode('rec');
+    w.startRecording('T1');                       // 뽀모도로 없이 기록만: 바 없음
+    const noBarRec = !q('#wPomoBar');
+    w.stopRecording();
+    return noBarIdle && ok && noBarRec;
+  });
+
   await step('펼치기: 원래 위젯으로 돌아온다', () => {
     q('.w-top-btn[title="펼치기"]').click();
     return !q('.widget.mini') && !!q('.w-list') && w.localStorage.getItem('widgetMini_v1') === '0';
