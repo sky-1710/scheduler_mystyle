@@ -176,7 +176,10 @@ setTimeout(async () => {
   await step('접힌 채 뽀모도로: 알약은 그대로(이름·남은 시간)이고 아래에 남은 시간 바가 붙는다', () => {
     const noBarIdle = !q('#wPomoBar');
     w.setTimerMode('pomo');
-    w.startRecording('T1');
+    w.startRecording('T1');                       // 세션은 휴식부터
+    const rest = !!q('.widget.mini.rest .w-mini-bar #wPomoBar') &&
+      /휴식 중/.test(q('.w-mini-name').textContent);
+    w.startRecording('T1');                       // 다시 누르면 바로 집중
     const bar = q('.widget.mini .w-mini-bar #wPomoBar');
     const ok = !!bar && parseFloat(bar.style.width) > 99 &&
       /첫 할일/.test(q('.w-mini-name').textContent) && !!q('#wPomoTime');
@@ -185,7 +188,7 @@ setTimeout(async () => {
     w.startRecording('T1');                       // 뽀모도로 없이 기록만: 바 없음
     const noBarRec = !q('#wPomoBar');
     w.stopRecording();
-    return noBarIdle && ok && noBarRec;
+    return noBarIdle && rest && ok && noBarRec;
   });
 
   await step('펼치기: 원래 위젯으로 돌아온다', () => {

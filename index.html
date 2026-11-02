@@ -3659,8 +3659,7 @@ function renderPlannerTodo() {
         showToast('타이머를 중지했습니다 ■');
       } else {
         paintTaskId = ev.id;
-        startRecording(ev.id);
-        showToast(`⏱️ "${ev.title}" 타이머 시작 — 10분 블록에 자동 기록됩니다`);
+        if (startRecording(ev.id)) showToast(`⏱️ "${ev.title}" 타이머 시작 — 10분 블록에 자동 기록됩니다`);
       }
       renderPlannerTodo();
       renderPlannerHabits();
@@ -3728,8 +3727,7 @@ function renderPlannerHabits() {
         showToast('타이머를 중지했습니다 ■');
       } else {
         paintTaskId = hb.id;
-        startRecording(hb.id);
-        showToast(`⏱️ "${hb.name}" 타이머 시작 — 10분 블록에 자동 기록됩니다`);
+        if (startRecording(hb.id)) showToast(`⏱️ "${hb.name}" 타이머 시작 — 10분 블록에 자동 기록됩니다`);
       }
       renderPlannerTodo();
       renderPlannerHabits();
@@ -5914,6 +5912,8 @@ function stripIdFromMaps(id) {
   }
   if (paintTaskId === id) paintTaskId = null;
   if (recording && recording.id === id) stopRecording();
+  // a break can be counting down towards this task with no recording running
+  if (pomo && pomo.taskId === id) stopPomo();
 }
 
 function deleteEventById(id) {
@@ -6618,11 +6618,12 @@ let lastRecordedKey = null;
 
 // ===== POMODORO =====
 // Lives in the widget but ticks from the main page's clock, so a session still
-// lands (and rings) while the widget is closed. Focus and break are set apart;
-// a finished focus waits for the break button (in 집중 모드 it rolls straight
-// into the break instead), and each phase rings once.
+// lands (and rings) while the widget is closed. Focus and break are set apart.
+// A session opens with the break, then focus; from there a finished focus waits
+// for the break button (in 집중 모드 it rolls straight into the break instead),
+// and each phase rings once.
 // phase 'work' | 'break' counts down; 'ready' is the pause after focus, waiting
-// for the break to be taken. taskId lets the next focus resume the same task.
+// for the break to be taken. taskId tells the next focus which task to run.
 let pomo = null;            // { endsAt, mins, phase, taskId }
 try { pomo = JSON.parse(localStorage.getItem('pomo_v1') || 'null'); } catch { pomo = null; }
 
@@ -6770,7 +6771,7 @@ function testPomoSound() {
 function ringPomodoro(phase, mins) {
   const title = phase === 'break' ? '휴식 끝' : '집중 완료';
   const body = phase === 'break'
-    ? `${mins}분 쉬었습니다. 다시 집중을 시작합니다.`
+    ? `${mins}분 쉬었습니다. 집중을 시작합니다.`
     : pomoLoop
       ? (pomoBreak > 0
           ? `${mins}분 집중을 마쳤습니다. ${pomoBreak}분 휴식을 시작합니다.`
@@ -6825,7 +6826,7 @@ function pomoTick() {
     else { pomo = null; savePomo(); }
     render();
   } else {
-    // break over: straight back into focus on the same task, and keep cycling
+    // break over: straight into focus on the session's task, and keep cycling
     // until it is stopped by hand
     if (task) {
       pomoAdvancing = true;
@@ -6947,16 +6948,28 @@ function updateRecordBtn() {
   }
 }
 
+// returns whether the clock on the task is now running
 function startRecording(id) {
+  // in pomodoro mode, choosing what to work on is what starts the session, and
+  // a session opens with the break: nothing is logged until focus takes over
+  if (pomoMode && !pomo && pomoBreak > 0) {
+    if (recording) stopRecording();
+    beginPhase('break', pomoBreak, id);
+    const src = findPaintable(id);
+    showToast(`☕ ${pomoBreak}분 쉬고 "${src ? src.title : ''}" 집중을 시작합니다`);
+    renderWidget();
+    return false;
+  }
   recording = { id, startedAt: Date.now(), lastMin: Math.floor(Date.now() / 60000) };
   localStorage.setItem('recording_v1', JSON.stringify(recording));
   lastRecordedKey = null;
-  // in pomodoro mode, choosing what to work on is what starts the session
+  // picked again mid-session (or with no break set): straight to focus
   if (pomoMode && !pomoAdvancing) beginPhase('work', pomoWork, id);
   updateRecordBtn();
   updateRecBar();
   recordTick();
   renderWidget();
+  return true;
 }
 
 function stopRecording() {
@@ -6979,8 +6992,7 @@ document.getElementById('recordBtn').onclick = () => {
     showToast('먼저 TO DO LIST에서 할일이나 습관을 선택하세요');
     return;
   }
-  startRecording(paintTaskId);
-  showToast('지금부터 10분 블록에 자동 기록됩니다 ⏺');
+  if (startRecording(paintTaskId)) showToast('지금부터 10분 블록에 자동 기록됩니다 ⏺');
 };
 
 // ===== FLOATING WIDGET (Document Picture-in-Picture) =====
@@ -7264,8 +7276,8 @@ function renderWidgetMain(doc, card, ds, now) {
     const modes = wEl(doc, 'div', 'w-modes');
     const cur = pomoLoop ? 'loop' : pomoMode ? 'pomo' : 'rec';
     [['rec', 'record', '기록', '할 일을 누르면 시간을 기록합니다'],
-     ['pomo', 'timer', '뽀모도로', '뽀모도로 — 할 일을 누르면 집중 타이머가 시작되고, 끝나면 휴식 버튼을 기다립니다'],
-     ['loop', 'repeat', '집중 모드', '집중 모드 — 중지할 때까지 같은 할 일로 집중·휴식을 버튼 없이 계속 이어갑니다'],
+     ['pomo', 'timer', '뽀모도로', '뽀모도로 — 할 일을 누르면 휴식부터 시작해 집중으로 넘어가고, 집중이 끝나면 휴식 버튼을 기다립니다'],
+     ['loop', 'repeat', '집중 모드', '집중 모드 — 할 일을 누르면 휴식부터 시작해 중지할 때까지 집중·휴식을 버튼 없이 계속 이어갑니다'],
     ].forEach(([mode, icon, label, title]) => {
       const b = wBtn(doc, 'w-mode' + (mode === cur ? ' on' : ''), `${ic(icon)}<span>${label}</span>`,
         title, () => setTimerMode(mode));
@@ -7274,10 +7286,11 @@ function renderWidgetMain(doc, card, ds, now) {
     });
     card.appendChild(modes);
     if (pomoMode) card.appendChild(widgetPomoSettings(doc));
+    const lead = pomoBreak > 0 ? `${pomoBreak}분 휴식 후 ` : '';
     card.appendChild(wEl(doc, 'div', 'w-pomo-hint',
       !pomoMode ? '할 일을 누르면 시간 기록이 시작됩니다'
-        : pomoLoop ? '할 일을 누르면 시작 · 중지할 때까지 계속 이어집니다'
-        : '할 일을 누르면 집중이 시작됩니다'));
+        : pomoLoop ? `할 일을 누르면 ${lead}시작 · 중지할 때까지 계속 이어집니다`
+        : `할 일을 누르면 ${lead}집중이 시작됩니다`));
   }
 
   const list = wEl(doc, 'div', 'w-list');
@@ -7291,7 +7304,7 @@ function renderWidgetMain(doc, card, ds, now) {
       <span class="w-circle" style="border-color:${color}${checked ? `;background:${color}` : ''}">${ic('check')}</span>
       <span class="w-title">${escHtml(title)}</span>
       ${min ? `<span class="w-min">${fmtMinutes(min)}</span>` : ''}
-      <span class="w-go" title="${pomoMode ? '집중 시작' : '기록 시작'}">${ic('play')}</span>
+      <span class="w-go" title="${!pomoMode ? '기록 시작' : pomo || !pomoBreak ? '집중 시작' : '휴식 후 집중 시작'}">${ic('play')}</span>
       <button class="w-del" title="삭제 (두 번 눌러 확인)">${ic('close')}</button>`);
     row.querySelector('.w-circle').onclick = e => {
       e.stopPropagation();
@@ -7510,7 +7523,7 @@ function widgetPomoSession(doc) {
     <div class="w-pomo-main">
       <div class="w-pomo-time" id="wPomoTime">${fmtCountdown(pomoLeftMs())}</div>
       <div class="w-pomo-lab">${rest
-        ? '휴식 중 · 끝나면 집중 재개'
+        ? '휴식 중 · 끝나면 집중 시작'
         : '집중 중' + (pomoBreak > 0 ? ` · 다음은 휴식 ${pomoBreak}분`
                                     : (pomoLoop ? ' · 바로 다음 집중' : ''))}${
         pomoLoop ? `<br><span class="w-loop">${ic('repeat')}집중 모드 · 중지할 때까지 계속</span>` : ''}</div>
