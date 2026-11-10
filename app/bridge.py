@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 from PySide6.QtMultimedia import QMediaDevices
 
 from . import sound, toast
+from .canvas import Canvas
 from .gcal import GCal, NeedsLogin, NotConfigured
 
 
@@ -44,6 +45,8 @@ class _Job(QRunnable):
 class Bridge(QObject):
     # emitted (from a worker) when an async Google operation finishes
     gcalResult = Signal(str)
+    # emitted (from a worker) when a Canvas feed fetch finishes
+    canvasResult = Signal(str)
     # earphones or a Bluetooth device came or went - the widget's picker re-lists
     audioOutputsChanged = Signal()
 
@@ -54,6 +57,8 @@ class Bridge(QObject):
         self._widget = widget      # the main window, which owns the floating widget
         self.gcal = GCal(storage.dir)
         self._gcal_busy = False
+        self.canvas = Canvas(storage.dir)
+        self._canvas_busy = False
         self._media = QMediaDevices(self)
         self._media.audioOutputsChanged.connect(self.audioOutputsChanged)
 
@@ -167,6 +172,65 @@ class Bridge(QObject):
             return json.dumps({"ok": True})
         except Exception as err:
             return json.dumps({"ok": False, "error": str(err)})
+
+    # ---------- canvas lms ----------
+
+    @Slot(result=str)
+    def canvasStatus(self) -> str:
+        """Local file read only - safe to run inline."""
+        try:
+            st = self.canvas.status()
+            st["busy"] = self._canvas_busy
+            return json.dumps(st, ensure_ascii=False)
+        except Exception as err:
+            return json.dumps({"connected": False, "error": str(err)}, ensure_ascii=False)
+
+    @Slot(str, result=str)
+    def canvasSetUrl(self, url: str) -> str:
+        try:
+            st = self.canvas.set_url(url)
+            st["ok"] = True
+            return json.dumps(st, ensure_ascii=False)
+        except Exception as err:   # CanvasError carries the message to show
+            return json.dumps({"ok": False, "error": str(err)}, ensure_ascii=False)
+
+    @Slot(result=str)
+    def canvasDisconnect(self) -> str:
+        try:
+            self.canvas.disconnect()
+            return json.dumps({"ok": True})
+        except Exception as err:
+            return json.dumps({"ok": False, "error": str(err)}, ensure_ascii=False)
+
+    @Slot(str, result=str)
+    def canvasMarkSeen(self, uids_json: str) -> str:
+        try:
+            self.canvas.mark_seen(json.loads(uids_json or "[]"))
+            return json.dumps({"ok": True})
+        except Exception as err:
+            return json.dumps({"ok": False, "error": str(err)}, ensure_ascii=False)
+
+    def _canvas_done(self, payload: str) -> None:
+        self._canvas_busy = False
+        try:
+            self.canvasResult.emit(payload)
+        except RuntimeError:
+            pass   # the app quit while the fetch was in flight
+
+    @Slot(bool)
+    def canvasFetchAsync(self, auto: bool) -> None:
+        """Downloads the feed on a worker; the result arrives via canvasResult.
+        `auto` is the background refresh, which the Canvas side keeps rare."""
+        if self._canvas_busy:
+            self.canvasResult.emit(json.dumps({"ok": False, "busy": True, "auto": auto}))
+            return
+        self._canvas_busy = True
+
+        def work():
+            out = self.canvas.fetch(auto=bool(auto))
+            out["auto"] = bool(auto)
+            return out
+        QThreadPool.globalInstance().start(_Job(work, self._canvas_done))
 
     # ---------- floating widget ----------
 

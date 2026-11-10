@@ -375,6 +375,23 @@
       transition: background 0.1s;
     }
     .bp-item:hover { background: var(--surface2); }
+    .bp-note { font-size: 11px; color: var(--text2); padding: 0 10px 6px; line-height: 1.5; white-space: pre-line; }
+    .cv-setup { display: flex; gap: 6px; padding: 0 10px 6px; }
+    .cv-setup input {
+      flex: 1; min-width: 0; font: inherit; font-size: 11px; color: var(--text);
+      padding: 5px 7px; border: 1px solid var(--border2); border-radius: var(--radius-sm);
+      background: var(--bg); outline: none;
+    }
+    .cv-setup input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+    .cv-setup button {
+      font: inherit; font-size: 11px; font-weight: 600; padding: 5px 9px; border: none;
+      border-radius: var(--radius-sm); background: var(--primary); color: #fff; cursor: pointer;
+    }
+    .cv-off {
+      font: inherit; font-size: 11px; color: var(--text2); background: none; border: none;
+      padding: 0 10px 6px; cursor: pointer; text-decoration: underline;
+    }
+    .cv-off:hover { color: var(--danger); }
 
     /* ===== MAIN ===== */
     .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
@@ -2370,6 +2387,15 @@
   <div id="gcalRow" style="display:none;border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
     <button class="bp-item" id="gcalBtn"><svg class="ic"><use href="#i-month"></use></svg> <span id="gcalLabel">Google 캘린더 연결</span></button>
     <div id="gcalNote" style="font-size:11px;color:var(--text2);padding:0 10px 6px;line-height:1.5"></div>
+  </div>
+  <div id="canvasRow" style="display:none;border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
+    <button class="bp-item" id="canvasBtn"><svg class="ic"><use href="#i-inbox"></use></svg> <span id="canvasLabel">Canvas 과제 가져오기</span></button>
+    <div class="cv-setup" id="canvasSetup" style="display:none">
+      <input id="canvasUrl" type="url" placeholder="https://…/feeds/calendars/user_….ics" spellcheck="false" autocomplete="off">
+      <button id="canvasSaveBtn">연결</button>
+    </div>
+    <div class="bp-note" id="canvasNote"></div>
+    <button class="cv-off" id="canvasOffBtn" style="display:none">연결 해제</button>
   </div>  <input type="file" id="importFile" accept=".json" style="display:none">
 </div>
 
@@ -5884,6 +5910,8 @@ document.getElementById('evSaveBtn').onclick = () => {
     if (idx >= 0) {
       // keep the original completion date when it stays completed
       if (ev.completed) ev.completedAt = events[idx].completedAt || todayStr();
+      // where an imported to-do came from (Canvas), which the form doesn't show
+      for (const k of IMPORT_FIELDS) if (events[idx][k] !== undefined) ev[k] = events[idx][k];
       events[idx] = ev;
     }
   } else {
@@ -6258,6 +6286,198 @@ async function gcalAction() {
   reportGcal(r, false);
 }
 
+// ===== CANVAS LMS =====
+// Assignments from the student's Canvas calendar feed - the private .ics link
+// Canvas offers for subscribing from Google Calendar - become to-dos. The shell
+// downloads it (one plain GET, no login, at most every few hours); merging
+// happens here, since the page owns `events`.
+const IMPORT_FIELDS = ['source', 'extId', 'extDue', 'extTitle', 'course', 'url'];
+const CANVAS_CHECK_MS = 30 * 60 * 1000;   // the shell decides whether it's actually due
+let canvasState = null;
+let canvasWaiting = null;
+
+async function refreshCanvas() {
+  if (!shell || !shell.canvasStatus) return;
+  try { canvasState = JSON.parse(await shellCall('canvasStatus') || '{}'); }
+  catch { canvasState = {}; }
+  const label = document.getElementById('canvasLabel');
+  const note = document.getElementById('canvasNote');
+  document.getElementById('canvasOffBtn').style.display = canvasState.connected ? '' : 'none';
+  if (!canvasState.connected) {
+    label.textContent = 'Canvas 과제 가져오기';
+    note.textContent = 'Canvas → 캘린더 → 「캘린더 피드」 주소를 붙여넣으면 마감일이 있는 과제가 할일로 들어옵니다.';
+    return;
+  }
+  document.getElementById('canvasSetup').style.display = 'none';
+  label.textContent = 'Canvas 과제 지금 가져오기';
+  const when = canvasState.lastFetch
+    ? new Date(canvasState.lastFetch).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })
+    : '아직 없음';
+  note.textContent = `${canvasState.host} · 과제 ${canvasState.count || 0}건 · 마지막 ${when}\n` +
+    (canvasState.error ? `⚠ ${canvasState.error}` : '6시간마다 자동으로 확인합니다.');
+}
+
+// Each course gets its own category under 「학교」 - deliberately apart from
+// 「공부」, which measures self-study only. The link is stored on the category
+// (canvasCourse), so renaming, recolouring or moving it never breaks it.
+// Canvas names courses 「이름_ABC1234_01(교수)」; anything without such a code
+// (school-wide trainings) goes to 「학교」 itself.
+const COURSE_CODE = /^(.*?)_[A-Z]{2,5}\d{3,5}(?:_|$)/;
+
+function canvasSchoolCat() {
+  let root = categories.find(c => c.canvasRoot) ||
+             categories.find(c => !c.parentId && (c.name || '').trim() === '학교');
+  if (!root) {
+    root = { id: genId(), name: '학교', color: '#64748B', parentId: null, weeklyGoalH: null };
+    categories.push(root);
+  }
+  root.canvasRoot = true;   // found again even if renamed later
+  return root;
+}
+
+function canvasCourseCat(course, preferColor) {
+  const m = COURSE_CODE.exec(course || '');
+  if (!m || !m[1].trim()) return canvasSchoolCat();
+  let cat = categories.find(c => c.canvasCourse === course);
+  if (!cat) {
+    const used = new Set(categories.map(c => (c.color || '').toUpperCase()));
+    const color = [preferColor, ...COLORS].find(c => c && !used.has(c.toUpperCase())) ||
+                  COLORS[categories.length % COLORS.length];
+    cat = { id: genId(), name: m[1].trim(), color, parentId: canvasSchoolCat().id,
+            weeklyGoalH: null, canvasCourse: course };
+    categories.push(cat);
+  }
+  return cat;
+}
+
+// Canvas to-dos with no category yet get their course's. One the user filed
+// somewhere by hand stays where it is.
+function canvasLinkCategories() {
+  let n = 0;
+  events.forEach(ev => {
+    if (ev.source !== 'canvas' || (ev.categoryId && catById(ev.categoryId))) return;
+    const cat = canvasCourseCat(ev.course, ev.color);
+    ev.categoryId = cat.id;
+    ev.color = cat.color;
+    n++;
+  });
+  return n;
+}
+
+// Feed items -> to-dos. New assignments come in once (deleting one keeps it gone);
+// ones already here follow Canvas when it moves a deadline or renames, but
+// anything the user changed by hand is left alone.
+function canvasMerge(items) {
+  const today = todayStr();
+  const byExt = new Map(events.filter(e => e.source === 'canvas').map(e => [e.extId, e]));
+  const linked = canvasLinkCategories();
+
+  let added = 0, updated = 0;
+  for (const it of items) {
+    const due = `${it.date} ${it.time}`;
+    const ev = byExt.get(it.uid);
+    if (ev) {
+      let changed = false;
+      if (ev.extDue !== due) { ev.date = it.date; ev.time = it.time; ev.extDue = due; changed = true; }
+      if (ev.extTitle !== it.title) { ev.title = it.title; ev.extTitle = it.title; changed = true; }
+      if (it.url && ev.url !== it.url) ev.url = it.url;
+      if (changed) updated++;
+      continue;
+    }
+    if (!it.isNew || it.date < today) continue;   // deleted by the user, or already past
+    const cat = canvasCourseCat(it.course, null);
+    events.push({
+      id: genId(), title: it.title, isTodo: true, date: it.date, endDate: '',
+      time: it.time, endTime: '', scope: null,
+      repeat: 'none', repeatN: 1, repeatEnd: '',
+      notifyBefore: 0, notifyStyle: 'normal',
+      color: cat.color, priority: 'normal', accuracy: null,
+      categoryId: cat.id, desc: '', completed: false,
+      source: 'canvas', extId: it.uid, extDue: due, extTitle: it.title,
+      course: it.course || '', url: it.url || '',
+    });
+    added++;
+  }
+  if (added || updated || linked) { saveEvents(); scheduleNotifs(); render(); }
+  // remember everything offered, so a to-do deleted later is not re-created
+  shellCall('canvasMarkSeen', JSON.stringify(items.map(it => it.uid)));
+  return { added, updated };
+}
+
+function onCanvasResult(payloadJson) {
+  let r = {};
+  try { r = JSON.parse(payloadJson || '{}'); } catch {}
+  const waiter = r.auto ? null : canvasWaiting;
+  if (waiter) canvasWaiting = null;
+  let merged = null;
+  if (r.ok && Array.isArray(r.items)) merged = canvasMerge(r.items);
+  refreshCanvas();
+  if (waiter) { waiter({ ...r, merged }); return; }
+  // background refresh: speak up only when something came in
+  if (merged && (merged.added || merged.updated)) {
+    showToast(`Canvas — 새 과제 ${merged.added}건` + (merged.updated ? `, 마감 변경 ${merged.updated}건` : ''));
+  }
+}
+
+function canvasRun(auto) {
+  return new Promise(resolve => {
+    if (!auto) canvasWaiting = resolve;
+    shell.canvasFetchAsync(!!auto);
+    if (auto) resolve(null);
+  });
+}
+
+function canvasAutoCheck() {
+  if (shell && canvasState && canvasState.connected) canvasRun(true);
+}
+
+async function canvasFetchNow() {
+  const note = document.getElementById('canvasNote');
+  note.textContent = 'Canvas에서 가져오는 중…';
+  const r = await canvasRun(false);
+  if (r.busy) { showToast('이미 가져오는 중입니다'); return; }
+  if (r.throttled) {
+    showToast(`방금 가져왔습니다 — ${Math.max(1, r.wait || 0)}초 뒤에 다시 눌러주세요`);
+    return;
+  }
+  if (!r.ok) { showToast('Canvas 가져오기 실패 — ' + (r.error || '')); return; }
+  const m = r.merged || { added: 0, updated: 0 };
+  showToast(m.added || m.updated
+    ? `Canvas — 새 과제 ${m.added}건` + (m.updated ? `, 마감 변경 ${m.updated}건` : '') + ' 반영'
+    : 'Canvas — 새 과제가 없습니다');
+}
+
+async function canvasConnect() {
+  const input = document.getElementById('canvasUrl');
+  const note = document.getElementById('canvasNote');
+  let r = {};
+  try { r = JSON.parse(await shellCall('canvasSetUrl', input.value) || '{}'); } catch {}
+  if (!r.ok) { note.textContent = '⚠ ' + (r.error || '주소를 확인해주세요'); return; }
+  input.value = '';   // the link is a secret; don't leave it sitting in the page
+  await refreshCanvas();
+  canvasFetchNow();
+}
+
+function canvasAction() {
+  if (!shell) return;
+  if (canvasState && canvasState.connected) { canvasFetchNow(); return; }
+  const setup = document.getElementById('canvasSetup');
+  const open = setup.style.display === 'none';
+  setup.style.display = open ? '' : 'none';
+  if (open) document.getElementById('canvasUrl').focus();
+}
+
+document.getElementById('canvasBtn').onclick = () => { canvasAction(); };
+document.getElementById('canvasSaveBtn').onclick = () => { canvasConnect(); };
+document.getElementById('canvasUrl').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); canvasConnect(); }
+});
+document.getElementById('canvasOffBtn').onclick = async () => {
+  await shellCall('canvasDisconnect');
+  await refreshCanvas();
+  showToast('Canvas 연결을 해제했습니다 (가져온 할일은 그대로 남습니다)');
+};
+
 let shellSaveTimer = null;
 function saveToShell() {
   if (!shell) return;
@@ -6311,6 +6531,16 @@ async function initShell(obj) {
   scheduleNotifs();
   render();
   if (loaded) console.log('loaded from', shellInfo.dataFile);
+  // Canvas merges into `events`, so only after the saved ones are in
+  if (shell.canvasFetchAsync && shell.canvasResult && shell.canvasResult.connect) {
+    document.getElementById('canvasRow').style.display = '';
+    shell.canvasResult.connect(onCanvasResult);
+    // to-dos imported before course categories existed get theirs now
+    if (canvasLinkCategories()) { saveEvents(); render(); }
+    await refreshCanvas();
+    canvasAutoCheck();
+    setInterval(canvasAutoCheck, CANVAS_CHECK_MS);
+  }
 }
 
 function updateConnectBtn(connected) {

@@ -14,6 +14,9 @@ data/.gcal_map.json
 .gcal_credentials.json
 .gcal_token.json
 
+# Canvas 캘린더 피드 주소 (비밀 링크) - 절대 공유 금지
+data/.canvas.json
+
 # 알람 소리 (실행 시 자동 생성됨)
 assets/alarm.wav
 
